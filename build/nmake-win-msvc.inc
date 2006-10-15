@@ -1,4 +1,4 @@
 INCPATH=/I$(BONJOURSDK)\include
 LIBPATH=/LIBPATH:$(BONJOURSDK)\lib
 
-LIBS=dnssd.lib
+LIBS=Ws2_32.lib dnssd.lib
