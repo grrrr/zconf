@@ -1,0 +1,4 @@
+NAME=zconf
+SRCS=zconf.cpp zconf_service.cpp zconf_browse.cpp zconf_resolve.cpp
+
+
