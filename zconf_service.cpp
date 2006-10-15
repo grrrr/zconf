@@ -1,13 +1,5 @@
 #include "zconf.h"
 
-#include <dns_sd.h>
-
-#if FLEXT_OS == FLEXT_OS_WIN
-#include <stdlib.h>
-#else
-#include <unistd.h>
-#endif
-
 namespace zconf {
 
 class Service;
@@ -16,9 +8,9 @@ class ServiceInstance
 	: public flext
 {
 public:
-	ServiceInstance(Service *s,const t_symbol *n,const t_symbol *t,const t_symbol *d,int p)
+	ServiceInstance(Service *s,const t_symbol *n,const t_symbol *t,const t_symbol *d,int p,const t_symbol *tx)
 		: self(s)
-		, name(n),type(t),domain(d),port(p)
+		, name(n),type(t),domain(d),port(p),text(tx)
 		, client(0) 
 	{}
 	
@@ -29,7 +21,7 @@ public:
 	}
 	
 	Service *self;
-	const t_symbol *name,*type,*domain;
+	const t_symbol *name,*type,*domain,*text;
 	int port;
 	DNSServiceRef client;
 };
@@ -42,16 +34,16 @@ public:
 
 	Service(int argc,const t_atom *argv)
 		: service(NULL)
-		, name(NULL),type(NULL),domain(NULL),port(0)
+		, name(NULL),type(NULL),domain(NULL),port(0),text(NULL)
 	{
 		AddInAnything("messages");
 		AddOutAnything("real registered service name");
 		
 		if(argc >= 1) {
 			if(IsSymbol(*argv)) 
-				name = GetSymbol(*argv);
+				type = GetSymbol(*argv);
 			else
-				throw "name must be a symbol";
+				throw "type must be a symbol";
 			--argc,++argv;
 		}
 		if(argc >= 1) {
@@ -63,14 +55,21 @@ public:
 		}
 		if(argc >= 1) {
 			if(IsSymbol(*argv)) 
-				type = GetSymbol(*argv);
+				name = GetSymbol(*argv);
 			else
-				throw "type must be a symbol";
+				throw "name must be a symbol";
 			--argc,++argv;
 		}
 		if(argc >= 1) {
 			if(IsSymbol(*argv)) 
 				domain = GetSymbol(*argv);
+			else
+				throw "domain must be a symbol";
+			--argc,++argv;
+		}
+		if(argc >= 1) {
+			if(IsSymbol(*argv)) 
+				text = GetSymbol(*argv);
 			else
 				throw "domain must be a symbol";
 			--argc,++argv;
@@ -86,7 +85,9 @@ public:
 	void ms_name(const AtomList &args)
 	{
 		const t_symbol *n;
-		if(args.Count() == 1 && IsSymbol(args[0]))
+		if(!args.Count())
+			n = NULL;
+		else if(args.Count() == 1 && IsSymbol(args[0]))
 			n = GetSymbol(args[0]);
 		else {
 			post("%s - name [symbol]",thisName());
@@ -147,10 +148,29 @@ public:
 		}
 	}
 
+	void ms_text(const AtomList &args)
+	{
+		const t_symbol *t;
+		if(args.Count() == 1 && IsSymbol(args[0]))
+			t = GetSymbol(args[0]);
+		else {
+			post("%s - text [symbol]",thisName());
+			return;
+		}
+
+		if(t != text) {
+			text = t;
+			Update();
+		}
+	}
+
+	void mg_text(AtomList &args) const { if(text) { args(1); SetSymbol(args[0],text); } }
+
+
 protected:
 
     ServiceInstance *service;
-	const t_symbol *name,*type,*domain;
+	const t_symbol *name,*type,*domain,*text;
 	int port;
 	
 	static const t_symbol *sym_error;
@@ -166,8 +186,8 @@ protected:
 	void Update()
 	{
 		Stop();
-		if(name && type && port) {
-			service = new ServiceInstance(this,name,type,domain,port);
+		if(type && port) {
+			service = new ServiceInstance(this,name,type,domain,port,text);
 			t_int data = (t_int)service;
 			sys_callback(IdleFunction,&data,1);
 		}	
@@ -194,17 +214,18 @@ protected:
 			uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
 			uint16_t PortAsNumber	= inst->port;
 			Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
+			const char *txtrec = inst->text?GetString(inst->text):NULL;
 
 			err = DNSServiceRegister(
 				&inst->client, 
 				flags, 
 				interfaceIndex, 
-				GetString(inst->name),
+				inst->name?GetString(inst->name):NULL,
 				GetString(inst->type),
 				inst->domain?GetString(inst->domain):NULL,
-				"", // host
+				NULL, // host
 				registerPort.NotAnInteger,
-				0, "",  // txtlen,txtrecord 
+				txtrec?strlen(txtrec)+1:0, txtrec,  // txtlen,txtrecord 
 				(DNSServiceRegisterReply)&register_reply, inst
 			);
 
@@ -280,6 +301,7 @@ protected:
 	FLEXT_CALLVAR_V(mg_domain,ms_domain)
 	FLEXT_CALLSET_I(ms_port)
 	FLEXT_ATTRGET_I(port)
+	FLEXT_CALLVAR_V(mg_text,ms_text)
 	
 	static void Setup(t_classid c)
 	{
@@ -289,6 +311,7 @@ protected:
 		FLEXT_CADDATTR_VAR(c,"port",port,ms_port);
 		FLEXT_CADDATTR_VAR(c,"type",mg_type,ms_type);
 		FLEXT_CADDATTR_VAR(c,"domain",mg_domain,ms_domain);
+		FLEXT_CADDATTR_VAR(c,"text",mg_text,ms_text);
 	}
 };
 

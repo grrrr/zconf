@@ -1,13 +1,5 @@
 #include "zconf.h"
 
-#include <dns_sd.h>
-
-#if FLEXT_OS == FLEXT_OS_WIN
-#include <stdlib.h>
-#else
-#include <unistd.h>
-#endif
-
 namespace zconf {
 
 class Browse;
@@ -150,6 +142,7 @@ protected:
 		if(UNLIKELY(!inst->client)) {
 			DNSServiceFlags flags	= 0;		// default renaming behaviour 
 			uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
+								// kDNSServiceInterfaceIndexLocalOnly or indexed interface
 			err = DNSServiceBrowse(&inst->client, 
 									flags, 
 									interfaceIndex, 
@@ -186,7 +179,7 @@ protected:
 	}
 
     static void DNSSD_API browse_reply( DNSServiceRef client, 
-                                        const DNSServiceFlags flags,
+                                        const DNSServiceFlags flags, // kDNSServiceFlagsMoreComing + kDNSServiceFlagsAdd
                                         uint32_t ifIndex, 
                                         DNSServiceErrorType errorCode,
                                         const char *replyName, 
