@@ -1,40 +1,100 @@
+/* 
+zconf - zeroconf networking objects
+
+Copyright (c)2006 Thomas Grill (gr@grrrr.org)
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see the file, "license.txt," in this distribution.  
+*/
+
 #include "zconf.h"
 
 namespace zconf {
 
-class Service;
-
-class ServiceInstance
-	: public flext
+class ServiceBase
+	: public Base
 {
 public:
-	ServiceInstance(Service *s,const t_symbol *n,const t_symbol *t,const t_symbol *d,int p,const t_symbol *tx)
-		: self(s)
-		, name(n),type(t),domain(d),port(p),text(tx)
-		, client(0) 
+	virtual void OnRegister(const char *name,const char *type,const char *domain) = 0;
+	virtual void OnError(const char *why) = 0;
+};
+
+class ServiceWorker
+	: public Worker
+{
+public:
+	ServiceWorker(ServiceBase *s,const t_symbol *n,const t_symbol *t,const t_symbol *d,int p,const t_symbol *tx)
+		: Worker(s)
+		, name(n),type(t),domain(d),text(tx),port(p)
 	{}
 	
-	~ServiceInstance()
+protected:
+//	typedef union { unsigned char b[2]; unsigned short NotAnInteger; } Opaque16;
+
+	virtual bool Init()
 	{
-        if(client) 
-			DNSServiceRefDeallocate(client);
-	}
+		DNSServiceFlags flags	= 0;		                        // default renaming behaviour 
+		uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
+//			uint16_t PortAsNumber	= inst->port;
+//			Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
+		const char *txtrec = text?GetString(text):NULL;
+
+		DNSServiceErrorType err = DNSServiceRegister(
+			&client, 
+			flags, 
+			interfaceIndex, 
+			name?GetString(name):NULL,
+			GetString(type),
+			domain?GetString(domain):NULL,
+			NULL, // host
+			port, // registerPort.NotAnInteger,
+			txtrec?strlen(txtrec)+1:0, txtrec,  // txtlen,txtrecord 
+			(DNSServiceRegisterReply)&callback, this
+		);
+
+		if(UNLIKELY(!client || err != kDNSServiceErr_NoError)) {
+			post("DNSService call failed: %i",err);
+			return false;
+		}
+		else
+			return Worker::Init();
+	} 
 	
-	Service *self;
 	const t_symbol *name,*type,*domain,*text;
 	int port;
-	DNSServiceRef client;
+
+private:
+    static void DNSSD_API callback(   DNSServiceRef       sdRef, 
+                                            DNSServiceFlags     flags, 
+                                            DNSServiceErrorType errorCode, 
+                                            const char          *name, 
+                                            const char          *regtype, 
+                                            const char          *domain, 
+                                            void                *context ) 
+	{
+        // do something with the values that have been registered
+        ServiceWorker *w = (ServiceWorker *)context;
+		FLEXT_ASSERT(w->self);
+		switch(errorCode) {
+			case kDNSServiceErr_NoError:      
+				static_cast<ServiceBase *>(w->self)->OnRegister(name,regtype,domain);
+				break;
+			case kDNSServiceErr_NameConflict: 
+				static_cast<ServiceBase *>(w->self)->OnError("name_in_use");
+				break;
+			default:
+				static_cast<ServiceBase *>(w->self)->OnError("unknown");
+		}
+	}
 };
 
 class Service
-	: public flext_base
+	: public ServiceBase
 {
-	FLEXT_HEADER_S(Service,flext_base,Setup)
+	FLEXT_HEADER_S(Service,ServiceBase,Setup)
 public:
 
 	Service(int argc,const t_atom *argv)
-		: service(NULL)
-		, name(NULL),type(NULL),domain(NULL),port(0),text(NULL)
+		: name(NULL),type(NULL),domain(NULL),text(NULL),port(0)
 	{
 		AddInAnything("messages");
 		AddOutAnything("real registered service name");
@@ -75,11 +135,6 @@ public:
 			--argc,++argv;
 		}
 		Update();
-	}
-
-	virtual ~Service()
-	{
-        Stop();
 	}
 
 	void ms_name(const AtomList &args)
@@ -169,118 +224,20 @@ public:
 
 protected:
 
-    ServiceInstance *service;
 	const t_symbol *name,*type,*domain,*text;
 	int port;
 	
 	static const t_symbol *sym_error;
 
-	void Stop()
-	{
-		if(service) {
-			service->self = NULL;
-			service = NULL;
-		}
-	}
-
 	void Update()
 	{
-		Stop();
-		if(type && port) {
-			service = new ServiceInstance(this,name,type,domain,port,text);
-			t_int data = (t_int)service;
-			sys_callback(IdleFunction,&data,1);
-		}	
+		if(type && port)
+			Install(new ServiceWorker(this,name,type,domain,port,text));
 		else
-			service = NULL;
+			Stop();
 	}
 
-	typedef union { unsigned char b[2]; unsigned short NotAnInteger; } Opaque16;
-
-	static t_int IdleFunction(t_int *data)
-	{
-		ServiceInstance *inst = (ServiceInstance *)data[0];
-		Service *self = inst->self;
-		if(!self) {
-			delete inst;
-			return 0; // stopped - don't run again
-		}
-		
-		DNSServiceErrorType err;
-			
-		if(UNLIKELY(!inst->client)) {
-
-			DNSServiceFlags flags	= 0;		                        // default renaming behaviour 
-			uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
-			uint16_t PortAsNumber	= inst->port;
-			Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
-			const char *txtrec = inst->text?GetString(inst->text):NULL;
-
-			err = DNSServiceRegister(
-				&inst->client, 
-				flags, 
-				interfaceIndex, 
-				inst->name?GetString(inst->name):NULL,
-				GetString(inst->type),
-				inst->domain?GetString(inst->domain):NULL,
-				NULL, // host
-				registerPort.NotAnInteger,
-				txtrec?strlen(txtrec)+1:0, txtrec,  // txtlen,txtrecord 
-				(DNSServiceRegisterReply)&register_reply, inst
-			);
-
-			if(UNLIKELY(!inst->client || err != kDNSServiceErr_NoError)) {
-				post("DNSServiceRegister call failed: %i",err);
-				return 2;
-			}
-			else
-				return 1; // call again as soon as possible			
-		}
-		else {
-			int dns_sd_fd = DNSServiceRefSockFD(inst->client);
-			int nfds = dns_sd_fd+1;
-			fd_set readfds;
-			
-			FD_ZERO(&readfds);
-			FD_SET(dns_sd_fd,&readfds);
-			timeval tv; tv.tv_sec = tv.tv_usec = 0; // don't block
-			int result = select(nfds,&readfds,NULL,NULL,&tv);
-			if(UNLIKELY(result > 0)) {
-				FLEXT_ASSERT(FD_ISSET(dns_sd_fd,&readfds));
-				err = DNSServiceProcessResult(inst->client);
-				if(UNLIKELY(err))
-					post("DNSServiceProcessResult call failed: %i",err);
-			}
-			
-			return 2; // call again on next cycle
-		}
-	}
-
-    static void DNSSD_API register_reply(   DNSServiceRef       sdRef, 
-                                            DNSServiceFlags     flags, 
-                                            DNSServiceErrorType errorCode, 
-                                            const char          *name, 
-                                            const char          *regtype, 
-                                            const char          *domain, 
-                                            void                *context ) {
-        // do something with the values that have been registered
-        ServiceInstance *inst = (ServiceInstance *)context;
-		if(inst->self) {
-			switch (errorCode)
-			{
-				case kDNSServiceErr_NoError:      
-					inst->self->OnRegister(name,regtype,domain);
-					break;
-				case kDNSServiceErr_NameConflict: 
-					inst->self->OnError("name_in_use");
-					break;
-				default:
-					inst->self->OnError("unknown");
-			}
-		}
-	}
-
-	void OnRegister(const char *name,const char *type,const char *domain)
+	virtual void OnRegister(const char *name,const char *type,const char *domain)
 	{
 		t_atom at[3];
 		SetString(at[0],name);
@@ -289,7 +246,7 @@ protected:
 		ToOutList(0,3,at);
 	}
 
-	void OnError(const char *why)
+	virtual void OnError(const char *why)
 	{
 		t_atom at;
 		SetString(at,why);

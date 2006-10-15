@@ -1,39 +1,79 @@
+/* 
+zconf - zeroconf networking objects
+
+Copyright (c)2006 Thomas Grill (gr@grrrr.org)
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see the file, "license.txt," in this distribution.  
+*/
+
 #include "zconf.h"
 
 namespace zconf {
 
-class Browse;
-
-class BrowserInstance
-	: public flext
+class BrowseBase
+	: public Base
 {
 public:
-	BrowserInstance(Browse *s,const t_symbol *t,const t_symbol *d)
-		: self(s)
+    virtual void OnBrowse(const char *name,const char *type,const char *domain,bool add) = 0;
+};
+
+class BrowseWorker
+	: public Worker
+{
+public:
+	BrowseWorker(BrowseBase *s,const t_symbol *t,const t_symbol *d)
+		: Worker(s)
 		, type(t),domain(d)
-		, client(0) 
 	{}
 	
-	~BrowserInstance()
+protected:
+	virtual bool Init()
 	{
-		if(client)
-			DNSServiceRefDeallocate(client);
-	}
+		DNSServiceFlags flags	= 0;		// default renaming behaviour 
+		uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
+							// kDNSServiceInterfaceIndexLocalOnly or indexed interface
+		DNSServiceErrorType err = DNSServiceBrowse(&client, 
+								flags, 
+								interfaceIndex, 
+								GetString(type), 
+								domain?GetString(domain):NULL, 
+								&callback, this);
+
+		if(UNLIKELY(!client || err != kDNSServiceErr_NoError)) {
+			post("DNSService call failed: %i",err);
+			return false;
+		}
+		else
+			return Worker::Init();
+	} 
 	
-	Browse *self;
 	const t_symbol *type,*domain;
-	DNSServiceRef client;
+
+private:
+    static void DNSSD_API callback( DNSServiceRef client, 
+                                        const DNSServiceFlags flags, // kDNSServiceFlagsMoreComing + kDNSServiceFlagsAdd
+                                        uint32_t ifIndex, 
+                                        DNSServiceErrorType errorCode,
+                                        const char *replyName, 
+                                        const char *replyType, 
+                                        const char *replyDomain,                             
+                                        void *context)
+    {
+        BrowseWorker *w = (BrowseWorker *)context;
+		FLEXT_ASSERT(w->self);
+		static_cast<BrowseBase *>(w->self)->OnBrowse(replyName,replyType,replyDomain,(flags & kDNSServiceFlagsAdd) != 0);
+    }
+
 };
 
 class Browse
-	: public flext_base
+	: public BrowseBase
 {
-	FLEXT_HEADER_S(Browse,flext_base,Setup)
+	FLEXT_HEADER_S(Browse,BrowseBase,Setup)
 public:
 
 	Browse(int argc,const t_atom *argv)
-		: browser(NULL)
-		, type(NULL),domain(NULL)
+		: type(NULL),domain(NULL)
 	{
 		AddInAnything("messages");
 		AddOutAnything("added/removed service");
@@ -53,11 +93,6 @@ public:
 			--argc,++argv;
 		}
 		Update();
-	}
-
-	virtual ~Browse()
-	{
-		Stop();
 	}
 
 	void ms_type(const AtomList &args)
@@ -99,100 +134,19 @@ public:
 	void mg_domain(AtomList &args) const { if(domain) { args(1); SetSymbol(args[0],domain); } }
 
 protected:
-//	typedef std::set<std::string> Services;
-//    Services services;
-	
-	BrowserInstance *browser;
 	const t_symbol *type,*domain;
 	
 	static const t_symbol *sym_add,*sym_remove;
 
-	void Stop()
-	{
-		if(browser) {
-			browser->self = NULL;
-			browser = NULL;
-		}
-	}
-
 	void Update()
 	{
-		Stop();
-		if(type) {
-			browser = new BrowserInstance(this,type,domain);
-			t_int data = (t_int)browser;
-			sys_callback(IdleFunction,&data,1);
-//			services.clear();
-		}
+		if(type)
+			Install(new BrowseWorker(this,type,domain));
 		else
-			browser = NULL;
+			Stop();
 	}
 
-	static t_int IdleFunction(t_int *data)
-	{
-		BrowserInstance *inst = (BrowserInstance *)data[0];
-		Browse *self = inst->self;
-		if(!self) {
-			delete inst;
-			return 0; // stopped - don't run again
-		}
-		
-		DNSServiceErrorType err;
-        
-		if(UNLIKELY(!inst->client)) {
-			DNSServiceFlags flags	= 0;		// default renaming behaviour 
-			uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
-								// kDNSServiceInterfaceIndexLocalOnly or indexed interface
-			err = DNSServiceBrowse(&inst->client, 
-									flags, 
-									interfaceIndex, 
-									GetString(inst->type), 
-									inst->domain?GetString(inst->domain):NULL, 
-									(DNSServiceBrowseReply)&browse_reply, 
-									inst);
-
-			if(UNLIKELY(!inst->client || err != kDNSServiceErr_NoError)) {
-				post("DNSService call failed: %i",err);
-				return 2;
-			}
-			else
-				return 1; // call again as soon as possible			
-		}
-		else {
-			int dns_sd_fd = DNSServiceRefSockFD(inst->client);
-			int nfds = dns_sd_fd+1;
-			fd_set readfds;
-			
-			FD_ZERO(&readfds);
-			FD_SET(dns_sd_fd,&readfds);
-			timeval tv; tv.tv_sec = tv.tv_usec = 0; // don't block
-			int result = select(nfds,&readfds,NULL,NULL,&tv);
-			if(UNLIKELY(result > 0)) {
-				FLEXT_ASSERT(FD_ISSET(dns_sd_fd,&readfds));
-				err = DNSServiceProcessResult(inst->client);
-				if(UNLIKELY(err))
-					post("DNSServiceProcessResult call failed: %i",err);
-			}
-			
-			return 2; // call again on next cycle
-		}
-	}
-
-    static void DNSSD_API browse_reply( DNSServiceRef client, 
-                                        const DNSServiceFlags flags, // kDNSServiceFlagsMoreComing + kDNSServiceFlagsAdd
-                                        uint32_t ifIndex, 
-                                        DNSServiceErrorType errorCode,
-                                        const char *replyName, 
-                                        const char *replyType, 
-                                        const char *replyDomain,                             
-                                        void *context)
-    {
-        BrowserInstance *inst = (BrowserInstance *)context;
-		if(inst->self)
-			inst->self->OnDiscover(replyName,replyType,replyDomain,(flags & kDNSServiceFlagsAdd) != 0);
-    }
-
-    void OnDiscover(const char *name,const char *type,const char *domain,bool add)
+    virtual void OnBrowse(const char *name,const char *type,const char *domain,bool add)
     {
 /*
 		std::string servname(name);
