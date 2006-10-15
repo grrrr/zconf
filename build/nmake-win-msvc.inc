@@ -1,0 +1,4 @@
+INCPATH=/I$(BONJOURSDK)\include
+LIBPATH=/LIBPATH:$(BONJOURSDK)\lib
+
+LIBS=dnssd.lib
