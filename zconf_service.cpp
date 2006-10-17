@@ -32,16 +32,14 @@ protected:
 
 	virtual bool Init()
 	{
-		DNSServiceFlags flags	= 0;		                        // default renaming behaviour 
-		uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
 		uint16_t PortAsNumber	= port;
 		Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
 		const char *txtrec = text?GetString(text):NULL;
 
 		DNSServiceErrorType err = DNSServiceRegister(
 			&client, 
-			flags, 
-			interfaceIndex, 
+			0, // flags: default renaming behaviour 
+			kDNSServiceInterfaceIndexAny, // all interfaces
 			name?GetString(name):NULL,
 			GetString(type),
 			domain?GetString(domain):NULL,
@@ -63,13 +61,14 @@ protected:
 	int port;
 
 private:
-    static void DNSSD_API callback(   DNSServiceRef       sdRef, 
-                                            DNSServiceFlags     flags, 
-                                            DNSServiceErrorType errorCode, 
-                                            const char          *name, 
-                                            const char          *regtype, 
-                                            const char          *domain, 
-                                            void                *context ) 
+    static void DNSSD_API callback(
+        DNSServiceRef       sdRef, 
+        DNSServiceFlags     flags, 
+        DNSServiceErrorType errorCode, 
+        const char          *name, 
+        const char          *regtype, 
+        const char          *domain, 
+        void                *context ) 
 	{
         // do something with the values that have been registered
         ServiceWorker *w = (ServiceWorker *)context;
@@ -160,7 +159,9 @@ public:
 	void ms_type(const AtomList &args)
 	{
 		const t_symbol *t;
-		if(args.Count() == 1 && IsSymbol(args[0]))
+		if(!args.Count())
+			t = NULL;
+		else if(args.Count() == 1 && IsSymbol(args[0]))
 			t = GetSymbol(args[0]);
 		else {
 			post("%s - type [symbol]",thisName());

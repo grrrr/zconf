@@ -23,7 +23,7 @@
 				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;FLEXT_SYS=2"
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="1"
+				RuntimeLibrary="5"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="TRUE"
@@ -71,7 +71,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;ZCONF_EXPORTS"
-				RuntimeLibrary="0"
+				RuntimeLibrary="4"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="TRUE"
@@ -122,6 +122,9 @@
 		</File>
 		<File
 			RelativePath=".\zconf_browse.cpp">
+		</File>
+		<File
+			RelativePath=".\zconf_domains.cpp">
 		</File>
 		<File
 			RelativePath=".\zconf_resolve.cpp">

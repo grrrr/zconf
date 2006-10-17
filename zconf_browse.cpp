@@ -29,15 +29,14 @@ public:
 protected:
 	virtual bool Init()
 	{
-		DNSServiceFlags flags	= 0;		// default renaming behaviour 
-		uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
-							// kDNSServiceInterfaceIndexLocalOnly or indexed interface
-		DNSServiceErrorType err = DNSServiceBrowse(&client, 
-								flags, 
-								interfaceIndex, 
-								GetString(type), 
-								domain?GetString(domain):NULL, 
-								&callback, this);
+		DNSServiceErrorType err = DNSServiceBrowse(
+            &client, 
+			0, // default renaming behaviour
+			kDNSServiceInterfaceIndexAny, // kDNSServiceInterfaceIndexLocalOnly or indexed interface
+			GetString(type), 
+			domain?GetString(domain):NULL, 
+			&callback, this
+        );
 
 		if(UNLIKELY(!client || err != kDNSServiceErr_NoError)) {
 			post("DNSService call failed: %i",err);
@@ -50,14 +49,15 @@ protected:
 	const t_symbol *type,*domain;
 
 private:
-    static void DNSSD_API callback( DNSServiceRef client, 
-                                        DNSServiceFlags flags, // kDNSServiceFlagsMoreComing + kDNSServiceFlagsAdd
-                                        uint32_t ifIndex, 
-                                        DNSServiceErrorType errorCode,
-                                        const char *replyName, 
-                                        const char *replyType, 
-                                        const char *replyDomain,                             
-                                        void *context)
+    static void DNSSD_API callback(
+        DNSServiceRef client, 
+        DNSServiceFlags flags, // kDNSServiceFlagsMoreComing + kDNSServiceFlagsAdd
+        uint32_t ifIndex, 
+        DNSServiceErrorType errorCode,
+        const char *replyName, 
+        const char *replyType, 
+        const char *replyDomain,                             
+        void *context)
     {
         BrowseWorker *w = (BrowseWorker *)context;
 		FLEXT_ASSERT(w->self);
@@ -98,7 +98,9 @@ public:
 	void ms_type(const AtomList &args)
 	{
 		const t_symbol *t;
-		if(args.Count() == 1 && IsSymbol(args[0]))
+		if(!args.Count())
+			t = NULL;
+		else if(args.Count() == 1 && IsSymbol(args[0]))
 			t = GetSymbol(args[0]);
 		else {
 			post("%s - type [symbol]",thisName());

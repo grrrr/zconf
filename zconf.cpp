@@ -8,7 +8,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.0.4"
+#define ZCONF_VERSION "0.1.0"
 
 namespace zconf {
 
@@ -39,17 +39,27 @@ Base::~Base()
 
 t_int Base::idlefun(t_int *)
 {
+	FLEXT_ASSERT(workers);
+
+    // remove freed workers before doing anything with them
+	for(int i = (int)workers->size()-1; i >= 0; --i) {
+		Worker *w = (*workers)[i];
+		if(!w->self) {
+			delete w;
+			workers->erase(workers->begin()+i);
+		}
+	}
+	
 	fd_set readfds;
 	int maxfds = -1;
-	bool init = false;
+	bool again = false;
 	FD_ZERO(&readfds);
-
-	FLEXT_ASSERT(workers);
-	for(Workers::iterator it = workers->begin(); it != workers->end(); ++it) {
+    
+    for(Workers::iterator it = workers->begin(); it != workers->end(); ++it) {
 		Worker *w = *it;
 		if(!w->client) {
 			if(w->Init())
-				init = true;
+				again = true;
 			else
 				w->Stop(); // marked to be unused
 		}
@@ -77,15 +87,7 @@ t_int Base::idlefun(t_int *)
 		}		
 	}
 
-	for(int i = workers->size()-1; i >= 0; --i) {
-		Worker *w = (*workers)[i];
-		if(!w->self) {
-			delete w;
-			workers->erase(workers->begin()+i);
-		}
-	}
-	
-	return init?1:2;
+	return again?1:2;
 }
 
 void Base::Setup(t_classid)
@@ -110,6 +112,7 @@ static void main()
 	flext::post("----------------------------------");
 
 	// call the objects' setup routines
+	FLEXT_SETUP(Domains);
 	FLEXT_SETUP(Browse);
 	FLEXT_SETUP(Service);
 	FLEXT_SETUP(Resolve);

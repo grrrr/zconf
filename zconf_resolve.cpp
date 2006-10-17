@@ -29,17 +29,15 @@ public:
 protected:
 	virtual bool Init()
 	{
-			DNSServiceFlags flags	= 0;		// default renaming behaviour 
-			uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
-			DNSServiceErrorType err;
-			err = DNSServiceResolve(&client,
-									flags,
-									interfaceIndex,
-									name?GetString(name):NULL,
-									GetString(type),
-									domain?GetString(domain):NULL,
-									callback, this
-			);
+		DNSServiceErrorType err = DNSServiceResolve(
+            &client,
+			0, // default renaming behaviour 
+			kDNSServiceInterfaceIndexAny, // all interfaces
+			name?GetString(name):NULL,
+			GetString(type),
+			domain?GetString(domain):NULL,
+			callback, this
+		);
 
 		if(UNLIKELY(!client || err != kDNSServiceErr_NoError)) {
 			post("DNSService call failed: %i",err);
@@ -52,16 +50,17 @@ protected:
 	const t_symbol *name,*type,*domain;
 
 private:
-    static void DNSSD_API callback(DNSServiceRef client, 
-                                        DNSServiceFlags flags, 
-                                        uint32_t ifIndex, 
-                                        DNSServiceErrorType errorCode,
-	                                    const char *fullname, 
-                                        const char *hosttarget, 
-                                        uint16_t opaqueport, 
-                                        uint16_t txtLen, 
-                                        const char *txtRecord, 
-                                        void *context)
+    static void DNSSD_API callback(
+        DNSServiceRef client, 
+        DNSServiceFlags flags, 
+        uint32_t ifIndex, 
+        DNSServiceErrorType errorCode,
+	    const char *fullname, 
+        const char *hosttarget, 
+        uint16_t opaqueport, 
+        uint16_t txtLen, 
+        const char *txtRecord, 
+        void *context)
 	{
         ResolveWorker *w = (ResolveWorker *)context;
 
@@ -90,38 +89,74 @@ public:
 
 	void m_resolve(int argc,const t_atom *argv)
 	{
-		if(argc < 3 || !IsSymbol(argv[0]) || !IsSymbol(argv[1]) || !IsSymbol(argv[2])) {
-			post("%s - %s: type (like _ssh._tcp or _osc._udp) name and domain must be given",thisName(),GetString(thisTag()));
-			return;
+        if(argc == 0)
+            Stop();
+        else if(argc < 2 || !IsSymbol(argv[0]) || !IsSymbol(argv[1])) {
+			post("%s - %s: type (like _ssh._tcp or _osc._udp) and host name must be given",thisName(),GetString(thisTag()));
 		}
-		
-		const t_symbol *type = GetSymbol(argv[0]);
-		const t_symbol *name = GetSymbol(argv[1]);
-		const t_symbol *domain = GetSymbol(argv[2]);
+        else {
+		    const t_symbol *type = GetSymbol(argv[0]);
+		    const t_symbol *name = GetSymbol(argv[1]);
+            const t_symbol *domain = argc >= 3?GetASymbol(argv[2]):sym_local;
 
-		Install(new ResolveWorker(this,name,type,domain));
+		    Install(new ResolveWorker(this,name,type,domain));
+        }
 	}
 
 protected:
 
+    static const t_symbol *sym_local;
+
     virtual void OnResolve(const char *fullName,const char *hostTarget,int port,const char *txtRecord)
     {
-		t_atom at[4];
-		SetString(at[0],fullName);
-		SetString(at[1],hostTarget);
-		SetInt(at[2],port);
+		t_atom at[5];
+        char temp[256],*t,*t1;
+        strcpy(temp,fullName);
+
+        t = getdot(t1 = temp);
+        FLEXT_ASSERT(t); // after host name
+        *t = 0;
+        SetString(at[0],t1); // host name
+
+        t = getdot(t1 = t+1);
+        FLEXT_ASSERT(t); // middle dot in type
+        t = getdot(t+1);
+        FLEXT_ASSERT(t); // after type
+        *t = 0;
+        SetString(at[1],t1); // type
+
+        SetString(at[2],t+1); // domain
+
+		SetInt(at[3],port);
 		bool txt = txtRecord && *txtRecord;
-		if(txt) SetString(at[3],txtRecord);
-		ToOutList(0,txt?4:3,at);
+		if(txt) SetString(at[4],txtRecord);
+		ToOutList(0,txt?5:4,at);
     }
 
 	FLEXT_CALLBACK_V(m_resolve)
 
 	static void Setup(t_classid c)
 	{
+        sym_local = MakeSymbol("local");
+
 		FLEXT_CADDMETHOD(c,0,m_resolve);
 	}
+
+private:
+    static char *getdot(char *txt)
+    {
+        bool escaped = false;      
+        for(char *t = txt; *t; ++t) {
+            if(*t == '\\')
+                escaped = !escaped;
+            else if(*t == '.' && !escaped)
+                return t;
+        }
+        return NULL;
+    }
 };
+
+const t_symbol *Resolve::sym_local;
 
 FLEXT_LIB("zconf.resolve",Resolve)
 
