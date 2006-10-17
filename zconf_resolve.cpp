@@ -53,20 +53,20 @@ protected:
 
 private:
     static void DNSSD_API callback(DNSServiceRef client, 
-                                        const DNSServiceFlags flags, 
+                                        DNSServiceFlags flags, 
                                         uint32_t ifIndex, 
                                         DNSServiceErrorType errorCode,
 	                                    const char *fullname, 
                                         const char *hosttarget, 
-                                        uint16_t port, //opaqueport, 
+                                        uint16_t opaqueport, 
                                         uint16_t txtLen, 
                                         const char *txtRecord, 
                                         void *context)
 	{
         ResolveWorker *w = (ResolveWorker *)context;
 
-//    	union { uint16_t s; unsigned char b[2]; } port = { opaqueport };
-//	    uint16_t port = ((uint16_t)port.b[0]) << 8 | port.b[1];
+    	union { uint16_t s; unsigned char b[2]; } oport = { opaqueport };
+	    uint16_t port = ((uint16_t)oport.b[0]) << 8 | oport.b[1];
 
 		FLEXT_ASSERT(w->self);
 		static_cast<ResolveBase *>(w->self)->OnResolve(fullname,hosttarget,port,txtRecord);
@@ -90,14 +90,14 @@ public:
 
 	void m_resolve(int argc,const t_atom *argv)
 	{
-		if(argc < 1 || !IsSymbol(argv[0])) {
-			post("%s - %s: type (like _ssh._tcp or _osc._udp) must be given at least",thisName(),GetString(thisTag()));
+		if(argc < 3 || !IsSymbol(argv[0]) || !IsSymbol(argv[1]) || !IsSymbol(argv[2])) {
+			post("%s - %s: type (like _ssh._tcp or _osc._udp) name and domain must be given",thisName(),GetString(thisTag()));
 			return;
 		}
 		
 		const t_symbol *type = GetSymbol(argv[0]);
-		const t_symbol *name = argc >= 2?GetASymbol(argv[1]):NULL;
-		const t_symbol *domain = argc >= 3?GetASymbol(argv[2]):NULL;
+		const t_symbol *name = GetSymbol(argv[1]);
+		const t_symbol *domain = GetSymbol(argv[2]);
 
 		Install(new ResolveWorker(this,name,type,domain));
 	}

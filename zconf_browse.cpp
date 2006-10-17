@@ -51,7 +51,7 @@ protected:
 
 private:
     static void DNSSD_API callback( DNSServiceRef client, 
-                                        const DNSServiceFlags flags, // kDNSServiceFlagsMoreComing + kDNSServiceFlagsAdd
+                                        DNSServiceFlags flags, // kDNSServiceFlagsMoreComing + kDNSServiceFlagsAdd
                                         uint32_t ifIndex, 
                                         DNSServiceErrorType errorCode,
                                         const char *replyName, 

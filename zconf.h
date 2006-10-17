@@ -33,7 +33,7 @@ class Worker
 	friend void Free(Worker *w);
 
 protected:
-	Worker(Base *b): client(0),fd(-1) {}
+	Worker(Base *b): self(b),client(0),fd(-1) {}
 	virtual ~Worker();
 	
 	inline void Stop();
@@ -41,9 +41,9 @@ protected:
 	// to be called from idle function (does the actual work)
 	virtual bool Init();	
 	
+	Base *self;
 	DNSServiceRef client;
 	int fd;
-	Base *self;
 };
 
 class Base

@@ -8,7 +8,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.0.3"
+#define ZCONF_VERSION "0.0.4"
 
 namespace zconf {
 

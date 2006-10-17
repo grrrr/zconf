@@ -1,4 +1,4 @@
-#N canvas 68 61 504 498 10;
+#N canvas 68 61 512 506 10;
 #X obj 34 75 zconf.browse;
 #X obj 34 96 print BROWSE;
 #X msg 30 21 type _ssh._tcp;
@@ -9,10 +9,10 @@
 #X obj 37 405 zconf.resolve;
 #X obj 37 426 print RESOLVE;
 #X msg 30 169 type _osc._udp \, port 8765;
-#X msg 38 341 list _ssh._tcp xbook local;
-#X msg 56 363 list _osc._udp;
 #X msg 140 48 type _ssh._tcp.;
 #X text 66 189 name \, domain and text are optional;
+#X msg 38 341 list _ssh._tcp minimac local;
+#X msg 55 363 list _osc._udp XOVO local;
 #X connect 0 0 1 0;
 #X connect 2 0 0 0;
 #X connect 3 0 0 0;
@@ -20,6 +20,6 @@
 #X connect 5 0 6 0;
 #X connect 7 0 8 0;
 #X connect 9 0 5 0;
-#X connect 10 0 7 0;
-#X connect 11 0 7 0;
-#X connect 12 0 0 0;
+#X connect 10 0 0 0;
+#X connect 12 0 7 0;
+#X connect 13 0 7 0;

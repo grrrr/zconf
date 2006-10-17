@@ -28,14 +28,14 @@ public:
 	{}
 	
 protected:
-//	typedef union { unsigned char b[2]; unsigned short NotAnInteger; } Opaque16;
+	typedef union { unsigned char b[2]; unsigned short NotAnInteger; } Opaque16;
 
 	virtual bool Init()
 	{
 		DNSServiceFlags flags	= 0;		                        // default renaming behaviour 
 		uint32_t interfaceIndex = kDNSServiceInterfaceIndexAny;		// all interfaces 
-//			uint16_t PortAsNumber	= inst->port;
-//			Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
+		uint16_t PortAsNumber	= port;
+		Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
 		const char *txtrec = text?GetString(text):NULL;
 
 		DNSServiceErrorType err = DNSServiceRegister(
@@ -46,7 +46,7 @@ protected:
 			GetString(type),
 			domain?GetString(domain):NULL,
 			NULL, // host
-			port, // registerPort.NotAnInteger,
+			registerPort.NotAnInteger,
 			txtrec?strlen(txtrec)+1:0, txtrec,  // txtlen,txtrecord 
 			(DNSServiceRegisterReply)&callback, this
 		);
