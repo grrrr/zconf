@@ -14,14 +14,14 @@ class ResolveBase
 	: public Base
 {
 public:
-    virtual void OnResolve(const char *hostname,const char *type,const char *domain,int port,const char *ifname,const char *txtRecord) = 0;
+    virtual void OnResolve(const char *hostname,const char *type,const char *domain,int port,int ifix,const char *txtRecord) = 0;
 };
 
 class ResolveWorker
 	: public Worker
 {
 public:
-	ResolveWorker(ResolveBase *s,Symbol n,Symbol t,Symbol d,Symbol i)
+	ResolveWorker(ResolveBase *s,Symbol n,Symbol t,Symbol d,int i)
 		: Worker(s)
 		, name(n),type(t),domain(d),interf(i)
 	{}
@@ -29,8 +29,6 @@ public:
 protected:
 	virtual bool Init()
 	{
-		uint32_t ifix = interf?conv_str2if(GetString(interf)):kDNSServiceInterfaceIndexAny;
-
 		char hostname[MAX_DOMAIN_NAME+1];
 		if(!name) {
 			gethostname(hostname,MAX_DOMAIN_NAME);
@@ -41,7 +39,7 @@ protected:
 		DNSServiceErrorType err = DNSServiceResolve(
             &client,
 			0, // default renaming behaviour 
-			ifix,
+            interf < 0?kDNSServiceInterfaceIndexLocalOnly:kDNSServiceInterfaceIndexAny, 
 			name?GetString(name):hostname,
 			GetString(type),
 			domain?GetString(domain):"local",
@@ -58,7 +56,8 @@ protected:
 		}
 	} 
 	
-	Symbol name,type,domain,interf;
+	Symbol name,type,domain;
+    int interf;
 
 private:
     static void DNSSD_API callback(
@@ -80,9 +79,6 @@ private:
 			union { uint16_t s; unsigned char b[2]; } oport = { opaqueport };
 			uint16_t port = ((uint16_t)oport.b[0]) << 8 | oport.b[1];
 		
-			char ifname[IF_NAMESIZE] = "";
-			conv_if2str(ifIndex,ifname);
-		
 			char temp[256],*t,*t1;
 			strcpy(temp,fullname);
 			
@@ -100,7 +96,7 @@ private:
 
 			const char *domain = t+1; // domain
 
-			static_cast<ResolveBase *>(w->self)->OnResolve(hostname,type,domain,port,ifname,txtRecord && *txtRecord?txtRecord:NULL);
+			static_cast<ResolveBase *>(w->self)->OnResolve(hostname,type,domain,port,ifIndex,txtRecord && *txtRecord?txtRecord:NULL);
 		}
 		else
 			static_cast<ResolveBase *>(w->self)->OnError(errorCode);
@@ -142,7 +138,7 @@ public:
 		    Symbol type = GetSymbol(argv[0]);
 		    Symbol name = argc >= 3?GetASymbol(argv[1]):NULL;
             Symbol domain = argc >= 3?GetASymbol(argv[2]):NULL;
-            Symbol interf = argc >= 4?GetASymbol(argv[3]):NULL;
+            int interf = argc >= 4?GetAInt(argv[3]):0;
 
 		    Install(new ResolveWorker(this,name,type,domain,interf));
         }
@@ -152,14 +148,14 @@ protected:
 
 	static Symbol sym_resolve;
 
-    virtual void OnResolve(const char *hostname,const char *type,const char *domain,int port,const char *ifname,const char *txtRecord)
+    virtual void OnResolve(const char *hostname,const char *type,const char *domain,int port,int ifix,const char *txtRecord)
     {
 		t_atom at[6];
         SetString(at[0],hostname); // host name
         SetString(at[1],type); // type
         SetString(at[2],domain); // domain
 		SetInt(at[3],port);
-		SetString(at[4],ifname);
+		SetInt(at[4],ifix);
 		if(txtRecord) SetString(at[5],txtRecord);
 		ToOutAnything(GetOutAttr(),sym_resolve,txtRecord?6:5,at);
     }

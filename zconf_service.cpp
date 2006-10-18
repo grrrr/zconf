@@ -21,7 +21,7 @@ class ServiceWorker
 	: public Worker
 {
 public:
-	ServiceWorker(ServiceBase *s,Symbol n,Symbol t,Symbol d,int p,Symbol i)
+	ServiceWorker(ServiceBase *s,Symbol n,Symbol t,Symbol d,int p,int i)
 		: Worker(s)
 		, name(n),type(t),domain(d),interf(i),port(p)
 	{}
@@ -33,12 +33,11 @@ protected:
 	{
 		uint16_t PortAsNumber	= port;
 		Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
-		uint32_t ifix = interf?conv_str2if(GetString(interf)):kDNSServiceInterfaceIndexAny;
 
 		DNSServiceErrorType err = DNSServiceRegister(
 			&client, 
 			0, // flags: default renaming behaviour 
-			ifix, 
+            interf < 0?kDNSServiceInterfaceIndexLocalOnly:kDNSServiceInterfaceIndexAny, 
 			name?GetString(name):NULL,
 			GetString(type),
 			domain?GetString(domain):NULL,
@@ -58,8 +57,8 @@ protected:
 		}
 	} 
 	
-	Symbol name,type,domain,text,interf;
-	int port;
+	Symbol name,type,domain,text;
+    int interf,port;
 
 private:
     static void DNSSD_API callback(
@@ -89,7 +88,7 @@ class Service
 public:
 
 	Service(int argc,const t_atom *argv)
-		: name(NULL),type(NULL),domain(NULL),interf(NULL),port(0)
+		: name(NULL),type(NULL),domain(NULL),interf(0),port(0)
 	{		
 		if(argc >= 1) {
 			if(IsSymbol(*argv)) 
@@ -120,10 +119,10 @@ public:
 			--argc,++argv;
 		}
 		if(argc >= 1) {
-			if(IsSymbol(*argv)) 
-				interf = GetSymbol(*argv);
+			if(CanbeInt(*argv)) 
+				interf = GetAInt(*argv);
 			else
-				throw "interface must be a symbol";
+				throw "interface must be an int";
 			--argc,++argv;
 		}
 		Update();
@@ -196,7 +195,15 @@ public:
 			Update();
 		}
 	}
-/*
+
+	void ms_interface(int i)
+	{
+		if(i != interf) {
+			interf = i;
+			Update();
+		}
+	}
+    /*
 	void ms_text(const AtomList &args)
 	{
 		Symbol t;
@@ -217,38 +224,13 @@ public:
 
 	void mg_text(AtomList &args) const { if(text) { args(1); SetSymbol(args[0],text); } }
 */
-	void ms_interface(const AtomList &args)
-	{
-		Symbol i;
-		if(!args.Count())
-			i = NULL;
-		if(args.Count() == 1 && IsSymbol(args[0]))
-			i = GetSymbol(args[0]);
-		else {
-			post("%s - interface [symbol]",thisName());
-			return;
-		}
-
-		if(i != interf) {
-			interf = i;
-			Update();
-		}
-	}
-
-	void mg_interface(AtomList &args) const 
-	{ 
-		if(interf) { 
-			args(1); 
-			SetSymbol(args[0],interf); 
-		} 
-	}
 
 protected:
 
 	static Symbol sym_service;
 
-	Symbol name,type,domain,interf;
-	int port;
+	Symbol name,type,domain;
+    int interf,port;
 	
 	virtual void Update()
 	{
@@ -272,7 +254,8 @@ protected:
 	FLEXT_CALLVAR_V(mg_domain,ms_domain)
 	FLEXT_CALLSET_I(ms_port)
 	FLEXT_ATTRGET_I(port)
-	FLEXT_CALLVAR_V(mg_interface,ms_interface)
+	FLEXT_CALLSET_I(ms_interface)
+	FLEXT_ATTRGET_I(interf)
 //	FLEXT_CALLVAR_V(mg_text,ms_text)
 	
 	static void Setup(t_classid c)
@@ -283,7 +266,7 @@ protected:
 		FLEXT_CADDATTR_VAR(c,"port",port,ms_port);
 		FLEXT_CADDATTR_VAR(c,"type",mg_type,ms_type);
 		FLEXT_CADDATTR_VAR(c,"domain",mg_domain,ms_domain);
-		FLEXT_CADDATTR_VAR(c,"interface",mg_interface,ms_interface);
+		FLEXT_CADDATTR_VAR(c,"interface",interf,ms_interface);
 //		FLEXT_CADDATTR_VAR(c,"txt",mg_text,ms_text);
 	}
 };

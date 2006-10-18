@@ -14,30 +14,28 @@ class DomainsBase
 	: public Base
 {
 public:
-    virtual void OnDomain(const char *domain,const char *ifname,bool add) = 0;
+    virtual void OnDomain(const char *domain,int ifix,bool add) = 0;
 };
 
 class DomainsWorker
 	: public Worker
 {
 public:
-	DomainsWorker(DomainsBase *s,Symbol i,bool reg)
+	DomainsWorker(DomainsBase *s,int i,bool reg)
 		: Worker(s)
         , interf(i),regdomains(reg)
 	{}
 	
 protected:
-	Symbol interf;
+	int interf;
     bool regdomains;
 
 	virtual bool Init()
 	{
-		uint32_t ifix = interf?conv_str2if(GetString(interf)):kDNSServiceInterfaceIndexAny;
-
         DNSServiceErrorType err = DNSServiceEnumerateDomains( 
             &client, 
             regdomains?kDNSServiceFlagsRegistrationDomains:kDNSServiceFlagsBrowseDomains, // flags
-            ifix,
+            interf < 0?kDNSServiceInterfaceIndexLocalOnly:kDNSServiceInterfaceIndexAny, 
             &callback, this
         );
 
@@ -63,11 +61,8 @@ private:
     {
         DomainsWorker *w = (DomainsWorker *)context;
 		FLEXT_ASSERT(w->self);
-		if(LIKELY(errorCode == kDNSServiceErr_NoError)) {
-			char ifname[IF_NAMESIZE] = "";
-			conv_if2str(ifIndex,ifname);
-			static_cast<DomainsBase *>(w->self)->OnDomain(replyDomain,ifname,(flags & kDNSServiceFlagsAdd) != 0);
-		}
+		if(LIKELY(errorCode == kDNSServiceErr_NoError))
+			static_cast<DomainsBase *>(w->self)->OnDomain(replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0);
 		else
 			static_cast<DomainsBase *>(w->self)->OnError(errorCode);
     }
@@ -81,7 +76,7 @@ class Domains
 public:
 
 	Domains()
-        : mode(0),interf(NULL)
+        : mode(0),interf(0)
 	{		
 		Update();
 	}
@@ -96,35 +91,17 @@ public:
         }
     }
 
-	void ms_interface(const AtomList &args)
+	void ms_interface(int i)
 	{
-		Symbol i;
-		if(!args.Count())
-			i = NULL;
-		if(args.Count() == 1 && IsSymbol(args[0]))
-			i = GetSymbol(args[0]);
-		else {
-			post("%s - interface [symbol]",thisName());
-			return;
-		}
-
 		if(i != interf) {
 			interf = i;
 			Update();
 		}
 	}
 
-	void mg_interface(AtomList &args) const 
-	{ 
-		if(interf) { 
-			args(1); 
-			SetSymbol(args[0],interf); 
-		} 
-	}
-
 protected:
     int mode;
-	Symbol interf;
+	int interf;
 
 	void Update()
 	{
@@ -134,22 +111,23 @@ protected:
             Stop();
 	}
 
-    virtual void OnDomain(const char *domain,const char *ifname,bool add)
+    virtual void OnDomain(const char *domain,int ifix,bool add)
     {
         t_atom at[2]; 
 		SetString(at[0],domain);
-		SetString(at[1],ifname);
+		SetInt(at[1],ifix);
 		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,2,at);
     }
 
     FLEXT_ATTRGET_I(mode)
     FLEXT_CALLSET_I(ms_mode)
-	FLEXT_CALLVAR_V(mg_interface,ms_interface)
+	FLEXT_CALLSET_I(ms_interface)
+	FLEXT_ATTRGET_I(interf)
 
 	static void Setup(t_classid c)
 	{
         FLEXT_CADDATTR_VAR(c,"mode",mode,ms_mode);
-        FLEXT_CADDATTR_VAR(c,"interface",mg_interface,ms_interface);
+        FLEXT_CADDATTR_VAR(c,"interface",interf,ms_interface);
 	}
 };
 

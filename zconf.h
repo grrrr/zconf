@@ -59,8 +59,6 @@ protected:
 	static char *conv_label2str(const domainlabel *label, char *ptr);
 	static char *conv_domain2str(const domainname *name, char *ptr);
 	static bool conv_type_domain(const void *rdata, uint16_t rdlen, char *type, char *domain);
-	static void conv_if2str(uint32_t interface, char *interfaceName);
-	static uint32_t conv_str2if(const char * interfaceName);
 };
 
 class Base

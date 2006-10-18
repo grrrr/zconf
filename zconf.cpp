@@ -114,30 +114,6 @@ exitWithError:
 	return false;
 }
 
-void Worker::conv_if2str(uint32_t interface, char * interfaceName)
-{
-	FLEXT_ASSERT(interfaceName != NULL);
-	
-	if(interface == kDNSServiceInterfaceIndexAny)
-		strcpy(interfaceName,"any");   // All active network interfaces.
-	else if(interface == kDNSServiceInterfaceIndexLocalOnly)
-		strcpy(interfaceName, "local");   // Only available locally on this machine.
-	else 
-		if_indextoname(interface, interfaceName);  // Converts interface index to interface name.
-}
-
-uint32_t Worker::conv_str2if(const char * interfaceName)
-{
-	FLEXT_ASSERT(interfaceName != NULL);
-	
-	if(!strcmp(interfaceName,"any")) 
-		return kDNSServiceInterfaceIndexAny;   // All active network interfaces.
-	else if(!strcmp(interfaceName,"local"))
-		return kDNSServiceInterfaceIndexLocalOnly;   // Only available locally on this machine.
-	else 
-		return if_nametoindex(interfaceName); // Converts interface index to interface name.
-}
-
 ////////////////////////////////////////////////
 
 Symbol Base::sym_error,Base::sym_add,Base::sym_remove;

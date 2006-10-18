@@ -127,6 +127,9 @@
 			RelativePath=".\zconf_domains.cpp">
 		</File>
 		<File
+			RelativePath=".\zconf_meta.cpp">
+		</File>
+		<File
 			RelativePath=".\zconf_resolve.cpp">
 		</File>
 		<File
