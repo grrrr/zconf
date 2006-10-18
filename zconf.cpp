@@ -8,7 +8,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.1.0"
+#define ZCONF_VERSION "0.1.1"
 
 namespace zconf {
 
@@ -28,14 +28,167 @@ bool Worker::Init()
 }
 
 
+char *Worker::conv_label2str(const domainlabel *const label, char *ptr)
+{
+	FLEXT_ASSERT(label != NULL);
+	FLEXT_ASSERT(ptr   != NULL);
+	
+	const unsigned char *      src = label->c;      // Domain label we're reading.
+	const unsigned char        len = *src++;        // Read length of this (non-null) label.
+	const unsigned char *const end = src + len;     // Work out where the label ends.
+	
+	if (len > MAX_DOMAIN_LABEL) return(NULL);       // If illegal label, abort.
+	while (src < end) {                             // While we have characters in the label.
+		unsigned char c = *src++;
+		if (c == '.' || c == '\\')                  // If character is a dot or the escape character
+			*ptr++ = '\\';                          // Output escape character.
+		else if (c <= ' ') {                        // If non-printing ascii, output decimal escape sequence.
+			*ptr++ = '\\';
+			*ptr++ = (char)  ('0' + (c / 100)     );
+			*ptr++ = (char)  ('0' + (c /  10) % 10);
+			c      = (unsigned char)('0' + (c      ) % 10);
+		}
+		*ptr++ = (char)c;                           // Copy the character.
+	}
+	*ptr = 0;                                       // Null-terminate the string
+	return(ptr);                                    // and return.
+}
+
+char *Worker::conv_domain2str(const domainname *const name, char *ptr)
+{
+	FLEXT_ASSERT(name != NULL);
+	FLEXT_ASSERT(ptr  != NULL);
+
+	const unsigned char *src         = name->c;                     // Domain name we're reading.
+	const unsigned char *const max   = name->c + MAX_DOMAIN_NAME;   // Maximum that's valid.
+
+	if (*src == 0) *ptr++ = '.';                                    // Special case: For root, just write a dot.
+
+	while (*src) {                                                  // While more characters in the domain name.
+		if (src + 1 + *src >= max) return(NULL);
+		ptr = conv_label2str((const domainlabel *)src, ptr);
+		if (!ptr) return(NULL);
+		src += 1 + *src;
+		*ptr++ = '.';                                               // Write the dot after the label.
+	}
+
+	*ptr++ = 0;                                                     // Null-terminate the string
+	return(ptr);                                                    // and return.
+}
+
+bool Worker::conv_type_domain(const void * rdata, uint16_t rdlen, char * type, char * domain)
+{
+	unsigned char *cursor;
+	unsigned char *start;
+	unsigned char *end;
+
+	FLEXT_ASSERT(rdata  != NULL);
+	FLEXT_ASSERT(rdlen  != 0);
+	FLEXT_ASSERT(type   != NULL);
+	FLEXT_ASSERT(domain != NULL);
+
+	start = new unsigned char[rdlen];
+	FLEXT_ASSERT(start != NULL);
+	memcpy(start, rdata, rdlen);
+
+	end = start + rdlen;
+	cursor = start;
+	if ((*cursor == 0) || (*cursor >= 64)) goto exitWithError;
+	cursor += 1 + *cursor;                                       // Move to the start of the second DNS label.
+	if (cursor >= end) goto exitWithError;
+	if ((*cursor == 0) || (*cursor >= 64)) goto exitWithError;
+	cursor += 1 + *cursor;                                       // Move to the start of the thrid DNS label.
+	if (cursor >= end) goto exitWithError;
+	
+	/* Take everything from start of third DNS label until end of DNS name and call that the "domain". */
+	if (conv_domain2str((const domainname *)cursor, domain) == NULL) goto exitWithError;
+	*cursor = 0;                                                 // Set the length byte of the third label to zero.
+
+	/* Take the first two DNS labels and call that the "type". */
+	if (conv_domain2str((const domainname *)start, type) == NULL) goto exitWithError;
+	delete[] start;
+	return true;
+
+exitWithError:
+	delete[] start;
+	return false;
+}
+
+void Worker::conv_if2str(uint32_t interface, char * interfaceName)
+{
+	FLEXT_ASSERT(interfaceName != NULL);
+	
+	if(interface == kDNSServiceInterfaceIndexAny)
+		strcpy(interfaceName,"any");   // All active network interfaces.
+	else if(interface == kDNSServiceInterfaceIndexLocalOnly)
+		strcpy(interfaceName, "local");   // Only available locally on this machine.
+	else 
+		if_indextoname(interface, interfaceName);  // Converts interface index to interface name.
+}
+
+uint32_t Worker::conv_str2if(const char * interfaceName)
+{
+	FLEXT_ASSERT(interfaceName != NULL);
+	
+	if(!strcmp(interfaceName,"any")) 
+		return kDNSServiceInterfaceIndexAny;   // All active network interfaces.
+	else if(!strcmp(interfaceName,"local"))
+		return kDNSServiceInterfaceIndexLocalOnly;   // Only available locally on this machine.
+	else 
+		return if_nametoindex(interfaceName); // Converts interface index to interface name.
+}
+
 ////////////////////////////////////////////////
 
+Symbol Base::sym_error,Base::sym_add,Base::sym_remove;
 Base::Workers *Base::workers = NULL;
+
+Base::Base() 
+	: worker(NULL)
+{
+	AddInAnything("messages");
+}
 
 Base::~Base() 
 {
 	Stop();
 }
+
+void Base::OnError(DNSServiceErrorType error)
+{
+	const char *errtxt;
+	switch(error) { 
+		case kDNSServiceErr_NoError: errtxt = "NoError"; break; 
+		case kDNSServiceErr_Unknown: errtxt = "Unknown"; break;
+		case kDNSServiceErr_NoSuchName: errtxt = "NoSuchName"; break;
+		case kDNSServiceErr_NoMemory: errtxt = "NoMemory"; break;
+		case kDNSServiceErr_BadParam: errtxt = "BadParam"; break;
+		case kDNSServiceErr_BadReference: errtxt = "BadReference"; break;
+		case kDNSServiceErr_BadState: errtxt = "BadState"; break;
+		case kDNSServiceErr_BadFlags: errtxt = "BadFlags"; break;
+		case kDNSServiceErr_Unsupported: errtxt = "Unsupported"; break;
+		case kDNSServiceErr_NotInitialized: errtxt = "NotInitialized"; break;
+		case kDNSServiceErr_AlreadyRegistered: errtxt = "AlreadyRegistered"; break;
+		case kDNSServiceErr_NameConflict: errtxt = "NameConflict"; break;
+		case kDNSServiceErr_Invalid: errtxt = "Invalid"; break;
+		case kDNSServiceErr_Firewall: errtxt = "Firewall"; break;
+		case kDNSServiceErr_Incompatible: errtxt = "Incompatible"; break;
+		case kDNSServiceErr_BadInterfaceIndex: errtxt = "BadInterfaceIndex"; break;
+		case kDNSServiceErr_Refused: errtxt = "Refused"; break;
+		case kDNSServiceErr_NoSuchRecord: errtxt = "NoSuchRecord"; break;
+		case kDNSServiceErr_NoAuth: errtxt = "NoAuth"; break;
+		case kDNSServiceErr_NoSuchKey: errtxt = "NoSuchKey"; break;
+		case kDNSServiceErr_NATTraversal: errtxt = "NATTraversal"; break;
+		case kDNSServiceErr_DoubleNAT: errtxt = "DoubleNAT"; break;
+		case kDNSServiceErr_BadTime: errtxt = "BadTime"; break;
+		default: errtxt = "?";
+	};  
+
+	t_atom at; 
+	SetString(at,errtxt);
+	ToOutAnything(GetOutAttr(),sym_error,1,&at);
+}
+
 
 t_int Base::idlefun(t_int *)
 {
@@ -93,6 +246,10 @@ t_int Base::idlefun(t_int *)
 void Base::Setup(t_classid)
 {
 	if(!workers) {
+		sym_error = MakeSymbol("error");
+		sym_add = MakeSymbol("add");
+		sym_remove = MakeSymbol("remove");
+
 		workers = new Workers;
 		sys_callback(idlefun,NULL,0);
 	}
@@ -116,6 +273,7 @@ static void main()
 	FLEXT_SETUP(Browse);
 	FLEXT_SETUP(Service);
 	FLEXT_SETUP(Resolve);
+	FLEXT_SETUP(Meta);
 }
 
 } // namespace

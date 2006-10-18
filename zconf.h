@@ -15,14 +15,21 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include <dns_sd.h>
 #if FLEXT_OS == FLEXT_OS_WIN
-#include <stdlib.h>
+	#include <stdlib.h>
 #else
-#include <unistd.h>
+	#include <unistd.h>
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	#include <net/if.h>
 #endif
 
 #include <vector>
 
 namespace zconf {
+
+#define MAX_DOMAIN_LABEL 63
+#define MAX_DOMAIN_NAME 255
+
 
 typedef const t_symbol *Symbol;
 
@@ -44,6 +51,16 @@ protected:
 	Base *self;
 	DNSServiceRef client;
 	int fd;
+
+
+	typedef struct { unsigned char c[ 64]; } domainlabel;      // One label: length byte and up to 63 characters.
+	typedef struct { unsigned char c[256]; } domainname;       // Up to 255 bytes of length-prefixed domainlabels.
+
+	static char *conv_label2str(const domainlabel *label, char *ptr);
+	static char *conv_domain2str(const domainname *name, char *ptr);
+	static bool conv_type_domain(const void *rdata, uint16_t rdlen, char *type, char *domain);
+	static void conv_if2str(uint32_t interface, char *interfaceName);
+	static uint32_t conv_str2if(const char * interfaceName);
 };
 
 class Base
@@ -54,9 +71,11 @@ class Base
 	friend class Worker;
 
 public:
-	Base(): worker(NULL) {}
+	Base();
 	virtual ~Base();
 	
+    virtual void OnError(DNSServiceErrorType error);
+
 protected:
 	void Install(Worker *w)
 	{
@@ -74,6 +93,7 @@ protected:
 		}
 	}
 
+	static Symbol sym_error,sym_add,sym_remove;
 
 private:
 	Worker *worker;

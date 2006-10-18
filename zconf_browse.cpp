@@ -14,39 +14,43 @@ class BrowseBase
 	: public Base
 {
 public:
-    virtual void OnBrowse(const char *name,const char *type,const char *domain,bool add) = 0;
+    virtual void OnBrowse(const char *name,const char *type,const char *domain,const char *ifname,bool add) = 0;
 };
 
 class BrowseWorker
 	: public Worker
 {
 public:
-	BrowseWorker(BrowseBase *s,const t_symbol *t,const t_symbol *d)
+	BrowseWorker(BrowseBase *s,Symbol t,Symbol d,Symbol i)
 		: Worker(s)
-		, type(t),domain(d)
+		, type(t),domain(d),interf(i)
 	{}
 	
 protected:
 	virtual bool Init()
 	{
+		uint32_t ifix = interf?conv_str2if(GetString(interf)):kDNSServiceInterfaceIndexAny;
+
 		DNSServiceErrorType err = DNSServiceBrowse(
             &client, 
 			0, // default renaming behaviour
-			kDNSServiceInterfaceIndexAny, // kDNSServiceInterfaceIndexLocalOnly or indexed interface
+			ifix,
 			GetString(type), 
 			domain?GetString(domain):NULL, 
 			&callback, this
         );
 
-		if(UNLIKELY(!client || err != kDNSServiceErr_NoError)) {
-			post("DNSService call failed: %i",err);
+		if(LIKELY(err == kDNSServiceErr_NoError)) {
+			FLEXT_ASSERT(client);
+			return Worker::Init();
+		}
+		else {
+			static_cast<BrowseBase *>(self)->OnError(err);
 			return false;
 		}
-		else
-			return Worker::Init();
 	} 
 	
-	const t_symbol *type,*domain;
+	Symbol type,domain,interf;
 
 private:
     static void DNSSD_API callback(
@@ -61,7 +65,14 @@ private:
     {
         BrowseWorker *w = (BrowseWorker *)context;
 		FLEXT_ASSERT(w->self);
-		static_cast<BrowseBase *>(w->self)->OnBrowse(replyName,replyType,replyDomain,(flags & kDNSServiceFlagsAdd) != 0);
+		
+		if(LIKELY(errorCode == kDNSServiceErr_NoError)) {
+			char ifname[IF_NAMESIZE] = "";
+			conv_if2str(ifIndex,ifname);
+			static_cast<BrowseBase *>(w->self)->OnBrowse(replyName,replyType,replyDomain,ifname,(flags & kDNSServiceFlagsAdd) != 0);
+		}
+		else
+			static_cast<BrowseBase *>(w->self)->OnError(errorCode);
     }
 
 };
@@ -73,11 +84,8 @@ class Browse
 public:
 
 	Browse(int argc,const t_atom *argv)
-		: type(NULL),domain(NULL)
+		: type(NULL),domain(NULL),interf(NULL)
 	{
-		AddInAnything("messages");
-		AddOutAnything("added/removed service");
-		
 		if(argc >= 1) {
 			if(IsSymbol(*argv)) 
 				type = GetSymbol(*argv);
@@ -92,12 +100,19 @@ public:
 				throw "domain must be a symbol";
 			--argc,++argv;
 		}
+		if(argc >= 1) {
+			if(IsSymbol(*argv)) 
+				interf = GetSymbol(*argv);
+			else
+				throw "interface must be a symbol";
+			--argc,++argv;
+		}
 		Update();
 	}
 
 	void ms_type(const AtomList &args)
 	{
-		const t_symbol *t;
+		Symbol t;
 		if(!args.Count())
 			t = NULL;
 		else if(args.Count() == 1 && IsSymbol(args[0]))
@@ -117,7 +132,7 @@ public:
 
 	void ms_domain(const AtomList &args)
 	{
-		const t_symbol *d;
+		Symbol d;
 		if(!args.Count())
 			d = NULL;
 		else if(args.Count() == 1 && IsSymbol(args[0]))
@@ -135,48 +150,64 @@ public:
 	
 	void mg_domain(AtomList &args) const { if(domain) { args(1); SetSymbol(args[0],domain); } }
 
-protected:
-	const t_symbol *type,*domain;
-	
-	static const t_symbol *sym_add,*sym_remove;
+	void ms_interface(const AtomList &args)
+	{
+		Symbol i;
+		if(!args.Count())
+			i = NULL;
+		if(args.Count() == 1 && IsSymbol(args[0]))
+			i = GetSymbol(args[0]);
+		else {
+			post("%s - interface [symbol]",thisName());
+			return;
+		}
 
-	void Update()
+		if(i != interf) {
+			interf = i;
+			Update();
+		}
+	}
+
+	void mg_interface(AtomList &args) const 
+	{ 
+		if(interf) { 
+			args(1); 
+			SetSymbol(args[0],interf); 
+		} 
+	}
+
+protected:
+	Symbol type,domain,interf;
+	
+	virtual void Update()
 	{
 		if(type)
-			Install(new BrowseWorker(this,type,domain));
+			Install(new BrowseWorker(this,type,domain,interf));
 		else
 			Stop();
 	}
 
-    virtual void OnBrowse(const char *name,const char *type,const char *domain,bool add)
+    virtual void OnBrowse(const char *name,const char *type,const char *domain,const char *ifname,bool add)
     {
-/*
-		std::string servname(name);
-        Services::iterator it = services.find(servname);
-        if(it != services.end()) return; // we already have it
-        services.insert(servname);
-*/
-        t_atom at[3]; 
+        t_atom at[4]; 
 		SetString(at[0],name);
 		SetString(at[1],type);
 		SetString(at[2],domain);
-		ToOutAnything(0,add?sym_add:sym_remove,3,at);
+		SetString(at[3],ifname);
+		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,4,at);
     }
 
 	FLEXT_CALLVAR_V(mg_type,ms_type)
 	FLEXT_CALLVAR_V(mg_domain,ms_domain)
+	FLEXT_CALLVAR_V(mg_interface,ms_interface)
 	
 	static void Setup(t_classid c)
 	{
-		sym_add = MakeSymbol("add");
-		sym_remove = MakeSymbol("remove");
-	
 		FLEXT_CADDATTR_VAR(c,"type",mg_type,ms_type);
 		FLEXT_CADDATTR_VAR(c,"domain",mg_domain,ms_domain);
+		FLEXT_CADDATTR_VAR(c,"interface",mg_interface,ms_interface);
 	}
 };
-
-const t_symbol *Browse::sym_add,*Browse::sym_remove;
 
 FLEXT_LIB_V("zconf.browse",Browse)
 

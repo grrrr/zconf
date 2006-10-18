@@ -15,16 +15,15 @@ class ServiceBase
 {
 public:
 	virtual void OnRegister(const char *name,const char *type,const char *domain) = 0;
-	virtual void OnError(const char *why) = 0;
 };
 
 class ServiceWorker
 	: public Worker
 {
 public:
-	ServiceWorker(ServiceBase *s,const t_symbol *n,const t_symbol *t,const t_symbol *d,int p,const t_symbol *tx)
+	ServiceWorker(ServiceBase *s,Symbol n,Symbol t,Symbol d,int p,Symbol i)
 		: Worker(s)
-		, name(n),type(t),domain(d),text(tx),port(p)
+		, name(n),type(t),domain(d),interf(i),port(p)
 	{}
 	
 protected:
@@ -34,30 +33,32 @@ protected:
 	{
 		uint16_t PortAsNumber	= port;
 		Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
-		const char *txtrec = text?GetString(text):NULL;
+		uint32_t ifix = interf?conv_str2if(GetString(interf)):kDNSServiceInterfaceIndexAny;
 
 		DNSServiceErrorType err = DNSServiceRegister(
 			&client, 
 			0, // flags: default renaming behaviour 
-			kDNSServiceInterfaceIndexAny, // all interfaces
+			ifix, 
 			name?GetString(name):NULL,
 			GetString(type),
 			domain?GetString(domain):NULL,
 			NULL, // host
 			registerPort.NotAnInteger,
-			txtrec?strlen(txtrec)+1:0, txtrec,  // txtlen,txtrecord 
+			0, NULL,  // txtlen,txtrecord 
 			(DNSServiceRegisterReply)&callback, this
 		);
 
-		if(UNLIKELY(!client || err != kDNSServiceErr_NoError)) {
-			post("DNSService call failed: %i",err);
+		if(LIKELY(err == kDNSServiceErr_NoError)) {
+			FLEXT_ASSERT(client);
+			return Worker::Init();
+		}
+		else {
+			static_cast<ServiceBase *>(self)->OnError(err);
 			return false;
 		}
-		else
-			return Worker::Init();
 	} 
 	
-	const t_symbol *name,*type,*domain,*text;
+	Symbol name,type,domain,text,interf;
 	int port;
 
 private:
@@ -73,16 +74,11 @@ private:
         // do something with the values that have been registered
         ServiceWorker *w = (ServiceWorker *)context;
 		FLEXT_ASSERT(w->self);
-		switch(errorCode) {
-			case kDNSServiceErr_NoError:      
-				static_cast<ServiceBase *>(w->self)->OnRegister(name,regtype,domain);
-				break;
-			case kDNSServiceErr_NameConflict: 
-				static_cast<ServiceBase *>(w->self)->OnError("name_in_use");
-				break;
-			default:
-				static_cast<ServiceBase *>(w->self)->OnError("unknown");
-		}
+		
+		if(LIKELY(errorCode == kDNSServiceErr_NoError))
+			static_cast<ServiceBase *>(w->self)->OnRegister(name,regtype,domain);
+		else
+			static_cast<ServiceBase *>(w->self)->OnError(errorCode);
 	}
 };
 
@@ -93,11 +89,8 @@ class Service
 public:
 
 	Service(int argc,const t_atom *argv)
-		: name(NULL),type(NULL),domain(NULL),text(NULL),port(0)
-	{
-		AddInAnything("messages");
-		AddOutAnything("real registered service name");
-		
+		: name(NULL),type(NULL),domain(NULL),interf(NULL),port(0)
+	{		
 		if(argc >= 1) {
 			if(IsSymbol(*argv)) 
 				type = GetSymbol(*argv);
@@ -128,9 +121,9 @@ public:
 		}
 		if(argc >= 1) {
 			if(IsSymbol(*argv)) 
-				text = GetSymbol(*argv);
+				interf = GetSymbol(*argv);
 			else
-				throw "domain must be a symbol";
+				throw "interface must be a symbol";
 			--argc,++argv;
 		}
 		Update();
@@ -138,7 +131,7 @@ public:
 
 	void ms_name(const AtomList &args)
 	{
-		const t_symbol *n;
+		Symbol n;
 		if(!args.Count())
 			n = NULL;
 		else if(args.Count() == 1 && IsSymbol(args[0]))
@@ -158,7 +151,7 @@ public:
 
 	void ms_type(const AtomList &args)
 	{
-		const t_symbol *t;
+		Symbol t;
 		if(!args.Count())
 			t = NULL;
 		else if(args.Count() == 1 && IsSymbol(args[0]))
@@ -178,7 +171,7 @@ public:
 
 	void ms_domain(const AtomList &args)
 	{
-		const t_symbol *d;
+		Symbol d;
 		if(!args.Count())
 			d = NULL;
 		else if(args.Count() == 1 && IsSymbol(args[0]))
@@ -203,10 +196,12 @@ public:
 			Update();
 		}
 	}
-
+/*
 	void ms_text(const AtomList &args)
 	{
-		const t_symbol *t;
+		Symbol t;
+		if(!args.Count())
+			t = NULL;
 		if(args.Count() == 1 && IsSymbol(args[0]))
 			t = GetSymbol(args[0]);
 		else {
@@ -221,19 +216,44 @@ public:
 	}
 
 	void mg_text(AtomList &args) const { if(text) { args(1); SetSymbol(args[0],text); } }
+*/
+	void ms_interface(const AtomList &args)
+	{
+		Symbol i;
+		if(!args.Count())
+			i = NULL;
+		if(args.Count() == 1 && IsSymbol(args[0]))
+			i = GetSymbol(args[0]);
+		else {
+			post("%s - interface [symbol]",thisName());
+			return;
+		}
 
+		if(i != interf) {
+			interf = i;
+			Update();
+		}
+	}
+
+	void mg_interface(AtomList &args) const 
+	{ 
+		if(interf) { 
+			args(1); 
+			SetSymbol(args[0],interf); 
+		} 
+	}
 
 protected:
 
-	const t_symbol *name,*type,*domain,*text;
+	static Symbol sym_service;
+
+	Symbol name,type,domain,interf;
 	int port;
 	
-	static const t_symbol *sym_error;
-
-	void Update()
+	virtual void Update()
 	{
-		if(type && port)
-			Install(new ServiceWorker(this,name,type,domain,port,text));
+		if(type)
+			Install(new ServiceWorker(this,name,type,domain,port,interf));
 		else
 			Stop();
 	}
@@ -244,14 +264,7 @@ protected:
 		SetString(at[0],name);
 		SetString(at[1],type);
 		SetString(at[2],domain);
-		ToOutList(0,3,at);
-	}
-
-	virtual void OnError(const char *why)
-	{
-		t_atom at;
-		SetString(at,why);
-		ToOutAnything(0,sym_error,1,&at);
+		ToOutAnything(GetOutAttr(),sym_service,3,at);
 	}
 
 	FLEXT_CALLVAR_V(mg_name,ms_name)
@@ -259,21 +272,23 @@ protected:
 	FLEXT_CALLVAR_V(mg_domain,ms_domain)
 	FLEXT_CALLSET_I(ms_port)
 	FLEXT_ATTRGET_I(port)
-	FLEXT_CALLVAR_V(mg_text,ms_text)
+	FLEXT_CALLVAR_V(mg_interface,ms_interface)
+//	FLEXT_CALLVAR_V(mg_text,ms_text)
 	
 	static void Setup(t_classid c)
 	{
-		sym_error = MakeSymbol("error");
+		sym_service = MakeSymbol("service");
 	
 		FLEXT_CADDATTR_VAR(c,"name",mg_name,ms_name);
 		FLEXT_CADDATTR_VAR(c,"port",port,ms_port);
 		FLEXT_CADDATTR_VAR(c,"type",mg_type,ms_type);
 		FLEXT_CADDATTR_VAR(c,"domain",mg_domain,ms_domain);
-		FLEXT_CADDATTR_VAR(c,"text",mg_text,ms_text);
+		FLEXT_CADDATTR_VAR(c,"interface",mg_interface,ms_interface);
+//		FLEXT_CADDATTR_VAR(c,"txt",mg_text,ms_text);
 	}
 };
 
-const t_symbol *Service::sym_error;
+Symbol Service::sym_service;
 
 FLEXT_LIB_V("zconf.service",Service)
 

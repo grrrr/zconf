@@ -14,36 +14,41 @@ class DomainsBase
 	: public Base
 {
 public:
-    virtual void OnDomain(const char *domain,bool add) = 0;
+    virtual void OnDomain(const char *domain,const char *ifname,bool add) = 0;
 };
 
 class DomainsWorker
 	: public Worker
 {
 public:
-	DomainsWorker(DomainsBase *s,bool reg)
+	DomainsWorker(DomainsBase *s,Symbol i,bool reg)
 		: Worker(s)
-        , regdomains(reg)
+        , interf(i),regdomains(reg)
 	{}
 	
 protected:
+	Symbol interf;
     bool regdomains;
 
 	virtual bool Init()
 	{
+		uint32_t ifix = interf?conv_str2if(GetString(interf)):kDNSServiceInterfaceIndexAny;
+
         DNSServiceErrorType err = DNSServiceEnumerateDomains( 
             &client, 
             regdomains?kDNSServiceFlagsRegistrationDomains:kDNSServiceFlagsBrowseDomains, // flags
-            kDNSServiceInterfaceIndexAny, // kDNSServiceInterfaceIndexLocalOnly or indexed interface
+            ifix,
             &callback, this
         );
 
-		if(UNLIKELY(!client || err != kDNSServiceErr_NoError)) {
-			post("DNSService call failed: %i",err);
+		if(LIKELY(err == kDNSServiceErr_NoError)) {
+			FLEXT_ASSERT(client);
+			return Worker::Init();
+		}
+		else {
+			static_cast<DomainsBase *>(self)->OnError(err);
 			return false;
 		}
-		else
-			return Worker::Init();
 	} 
 	
 private:
@@ -58,7 +63,13 @@ private:
     {
         DomainsWorker *w = (DomainsWorker *)context;
 		FLEXT_ASSERT(w->self);
-		static_cast<DomainsBase *>(w->self)->OnDomain(replyDomain,(flags & kDNSServiceFlagsAdd) != 0);
+		if(LIKELY(errorCode == kDNSServiceErr_NoError)) {
+			char ifname[IF_NAMESIZE] = "";
+			conv_if2str(ifIndex,ifname);
+			static_cast<DomainsBase *>(w->self)->OnDomain(replyDomain,ifname,(flags & kDNSServiceFlagsAdd) != 0);
+		}
+		else
+			static_cast<DomainsBase *>(w->self)->OnError(errorCode);
     }
 
 };
@@ -70,11 +81,8 @@ class Domains
 public:
 
 	Domains()
-        : mode(0)
-	{
-		AddInAnything("messages");
-		AddOutAnything("added/removed service");
-		
+        : mode(0),interf(NULL)
+	{		
 		Update();
 	}
 
@@ -88,39 +96,62 @@ public:
         }
     }
 
+	void ms_interface(const AtomList &args)
+	{
+		Symbol i;
+		if(!args.Count())
+			i = NULL;
+		if(args.Count() == 1 && IsSymbol(args[0]))
+			i = GetSymbol(args[0]);
+		else {
+			post("%s - interface [symbol]",thisName());
+			return;
+		}
+
+		if(i != interf) {
+			interf = i;
+			Update();
+		}
+	}
+
+	void mg_interface(AtomList &args) const 
+	{ 
+		if(interf) { 
+			args(1); 
+			SetSymbol(args[0],interf); 
+		} 
+	}
+
 protected:
     int mode;
-
-	static const t_symbol *sym_add,*sym_remove;
+	Symbol interf;
 
 	void Update()
 	{
         if(mode)
-            Install(new DomainsWorker(this,mode == 2));
+            Install(new DomainsWorker(this,interf,mode == 2));
         else
             Stop();
 	}
 
-    virtual void OnDomain(const char *domain,bool add)
+    virtual void OnDomain(const char *domain,const char *ifname,bool add)
     {
-        t_atom at; 
-		SetString(at,domain);
-		ToOutAnything(0,add?sym_add:sym_remove,1,&at);
+        t_atom at[2]; 
+		SetString(at[0],domain);
+		SetString(at[1],ifname);
+		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,2,at);
     }
 
     FLEXT_ATTRGET_I(mode)
     FLEXT_CALLSET_I(ms_mode)
+	FLEXT_CALLVAR_V(mg_interface,ms_interface)
 
 	static void Setup(t_classid c)
 	{
-		sym_add = MakeSymbol("add");
-		sym_remove = MakeSymbol("remove");
-
         FLEXT_CADDATTR_VAR(c,"mode",mode,ms_mode);
+        FLEXT_CADDATTR_VAR(c,"interface",mg_interface,ms_interface);
 	}
 };
-
-const t_symbol *Domains::sym_add,*Domains::sym_remove;
 
 FLEXT_LIB("zconf.domains",Domains)
 
