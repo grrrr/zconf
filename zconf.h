@@ -13,15 +13,17 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include <flext.h>
 
-#include <dns_sd.h>
 #if FLEXT_OS == FLEXT_OS_WIN
 	#include <stdlib.h>
+    #include <winsock2.h>
 #else
 	#include <unistd.h>
 	#include <sys/types.h>
 	#include <sys/socket.h>
 	#include <net/if.h>
 #endif
+
+#include <dns_sd.h>
 
 #include <vector>
 

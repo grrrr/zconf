@@ -14,7 +14,7 @@ class BrowseBase
 	: public Base
 {
 public:
-    virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add) = 0;
+    virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add,bool more) = 0;
 };
 
 class BrowseWorker
@@ -66,7 +66,7 @@ private:
 		FLEXT_ASSERT(w->self);
 		
 		if(LIKELY(errorCode == kDNSServiceErr_NoError))
-			static_cast<BrowseBase *>(w->self)->OnBrowse(replyName,replyType,replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0);
+			static_cast<BrowseBase *>(w->self)->OnBrowse(replyName,replyType,replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0,(flags & kDNSServiceFlagsMoreComing) != 0);
 		else
 			static_cast<BrowseBase *>(w->self)->OnError(errorCode);
     }
@@ -166,14 +166,15 @@ protected:
 			Stop();
 	}
 
-    virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add)
+    virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add,bool more)
     {
-        t_atom at[4]; 
+        t_atom at[5]; 
 		SetString(at[0],name);
 		SetString(at[1],type);
 		SetString(at[2],domain);
 		SetInt(at[3],ifix);
-		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,4,at);
+		SetBool(at[4],more);
+		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,5,at);
     }
 
 	FLEXT_CALLVAR_V(mg_type,ms_type)

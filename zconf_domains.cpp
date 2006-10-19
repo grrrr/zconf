@@ -14,7 +14,7 @@ class DomainsBase
 	: public Base
 {
 public:
-    virtual void OnDomain(const char *domain,int ifix,bool add) = 0;
+    virtual void OnDomain(const char *domain,int ifix,bool add,bool more) = 0;
 };
 
 class DomainsWorker
@@ -62,7 +62,7 @@ private:
         DomainsWorker *w = (DomainsWorker *)context;
 		FLEXT_ASSERT(w->self);
 		if(LIKELY(errorCode == kDNSServiceErr_NoError))
-			static_cast<DomainsBase *>(w->self)->OnDomain(replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0);
+			static_cast<DomainsBase *>(w->self)->OnDomain(replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0,(flags & kDNSServiceFlagsMoreComing) != 0);
 		else
 			static_cast<DomainsBase *>(w->self)->OnError(errorCode);
     }
@@ -111,12 +111,13 @@ protected:
             Stop();
 	}
 
-    virtual void OnDomain(const char *domain,int ifix,bool add)
+    virtual void OnDomain(const char *domain,int ifix,bool add,bool more)
     {
-        t_atom at[2]; 
+        t_atom at[3]; 
 		SetString(at[0],domain);
 		SetInt(at[1],ifix);
-		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,2,at);
+		SetBool(at[2],more);
+		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,3,at);
     }
 
     FLEXT_ATTRGET_I(mode)

@@ -17,7 +17,7 @@ class MetaBase
 	: public Base
 {
 public:
-    virtual void OnMeta(const char *type,const char *domain,int interf,bool add) = 0;
+    virtual void OnMeta(const char *type,const char *domain,int interf,bool add,bool more) = 0;
 };
 
 class MetaWorker
@@ -79,7 +79,7 @@ private:
 		    /* Get the type and domain from the discovered PTR record. */
 			conv_type_domain(rdata, rdlen, type, domain);        
 
-			static_cast<MetaBase *>(w->self)->OnMeta(type,domain,interf,(flags & kDNSServiceFlagsAdd) != 0);
+			static_cast<MetaBase *>(w->self)->OnMeta(type,domain,interf,(flags & kDNSServiceFlagsAdd) != 0,(flags & kDNSServiceFlagsMoreComing) != 0);
 		} 
 		else
 			static_cast<MetaBase *>(w->self)->OnError(errorCode);
@@ -124,13 +124,14 @@ protected:
 			Stop();
 	}
 
-    virtual void OnMeta(const char *type,const char *domain,int interf,bool add)
+    virtual void OnMeta(const char *type,const char *domain,int interf,bool add,bool more)
     {
-        t_atom at[3]; 
+        t_atom at[4]; 
 		SetString(at[0],type);
 		SetString(at[1],domain);
 		SetInt(at[2],interf);
-		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,3,at);
+        SetBool(at[3],more);
+		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,4,at);
     }
 
 	FLEXT_ATTRGET_B(active)
