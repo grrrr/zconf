@@ -173,7 +173,7 @@ t_int Base::idlefun(t_int *)
     // remove freed workers before doing anything with them
 	for(int i = (int)workers->size()-1; i >= 0; --i) {
 		Worker *w = (*workers)[i];
-		if(!w->self) {
+		if(UNLIKELY(!w->self)) {
 			delete w;
 			workers->erase(workers->begin()+i);
 		}
@@ -186,8 +186,8 @@ t_int Base::idlefun(t_int *)
     
     for(Workers::iterator it = workers->begin(); it != workers->end(); ++it) {
 		Worker *w = *it;
-		if(!w->client) {
-			if(w->Init())
+		if(UNLIKELY(!w->client)) {
+			if(LIKELY(w->Init()))
 				again = true;
 			else
 				w->Stop(); // marked to be unused
@@ -198,7 +198,7 @@ t_int Base::idlefun(t_int *)
 		}
 	}
 	
-	if(maxfds >= 0) {
+	if(LIKELY(maxfds >= 0)) {
 		timeval tv; 
 		tv.tv_sec = tv.tv_usec = 0; // don't block
 		int result = select(maxfds+1,&readfds,NULL,NULL,&tv);
