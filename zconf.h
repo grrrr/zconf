@@ -18,6 +18,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
     #include <winsock2.h>
 #else
 	#include <unistd.h>
+	#include <netdb.h>
 	#include <sys/types.h>
 	#include <sys/socket.h>
 	#include <net/if.h>
