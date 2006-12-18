@@ -174,7 +174,7 @@ protected:
 		SetString(at[2],domain);
 		SetInt(at[3],ifix);
 		SetBool(at[4],more);
-		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,5,at);
+		ToQueueAnything(GetOutAttr(),add?sym_add:sym_remove,5,at);
     }
 
 	FLEXT_CALLVAR_V(mg_type,ms_type)

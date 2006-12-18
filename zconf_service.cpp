@@ -246,7 +246,7 @@ protected:
 		SetString(at[0],name);
 		SetString(at[1],type);
 		SetString(at[2],domain);
-		ToOutAnything(GetOutAttr(),sym_service,3,at);
+		ToQueueAnything(GetOutAttr(),sym_service,3,at);
 	}
 
 	FLEXT_CALLVAR_V(mg_name,ms_name)

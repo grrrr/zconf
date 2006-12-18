@@ -180,7 +180,7 @@ protected:
 		SetInt(at[4],port);
 		SetInt(at[5],ifix);
 		if(txtRecord) SetString(at[6],txtRecord);
-		ToOutAnything(GetOutAttr(),sym_resolve,txtRecord?7:6,at);
+		ToQueueAnything(GetOutAttr(),sym_resolve,txtRecord?7:6,at);
     }
 
 	FLEXT_CALLBACK_V(m_resolve)

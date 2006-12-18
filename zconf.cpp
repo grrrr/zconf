@@ -8,7 +8,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.1.2"
+#define ZCONF_VERSION "0.1.3"
 
 namespace zconf {
 
@@ -162,9 +162,16 @@ void Base::OnError(DNSServiceErrorType error)
 
 	t_atom at; 
 	SetString(at,errtxt);
-	ToOutAnything(GetOutAttr(),sym_error,1,&at);
+	ToQueueAnything(GetOutAttr(),sym_error,1,&at);
 }
 
+void Base::Install(Worker *w)
+{
+	if(worker) Stop();
+	FLEXT_ASSERT(workers);
+	workers->push_back(worker = w);
+	// wake up idle....
+}
 
 t_int Base::idlefun(t_int *)
 {
@@ -205,7 +212,8 @@ t_int Base::idlefun(t_int *)
 		if(result > 0) {
 			for(Workers::iterator it = workers->begin(); it != workers->end(); ++it) {
 				Worker *w = *it;
-				if(FD_ISSET(w->fd,&readfds)) {
+//				fprintf(stderr,"%p %p",w,w?w->fd:NULL);
+				if(w->fd >= 0 && FD_ISSET(w->fd,&readfds)) {
 					DNSServiceErrorType err = DNSServiceProcessResult(w->client);
 					if(UNLIKELY(err)) {
 						post("DNSServiceProcessResult call failed: %i",err);

@@ -78,13 +78,7 @@ public:
     virtual void OnError(DNSServiceErrorType error);
 
 protected:
-	void Install(Worker *w)
-	{
-		if(worker) Stop();
-		FLEXT_ASSERT(workers);
-		workers->push_back(worker = w);
-		// wake up idle....
-	}
+	void Install(Worker *w);
 
 	void Stop()
 	{

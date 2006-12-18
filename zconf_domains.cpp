@@ -117,7 +117,7 @@ protected:
 		SetString(at[0],domain);
 		SetInt(at[1],ifix);
 		SetBool(at[2],more);
-		ToOutAnything(GetOutAttr(),add?sym_add:sym_remove,3,at);
+		ToQueueAnything(GetOutAttr(),add?sym_add:sym_remove,3,at);
     }
 
     FLEXT_ATTRGET_I(mode)
