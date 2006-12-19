@@ -14,7 +14,7 @@ class ResolveBase
 	: public Base
 {
 public:
-    virtual void OnResolve(const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,const char *txtRecord) = 0;
+    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,const char *txtRecord) = 0;
 };
 
 class ResolveWorker
@@ -29,22 +29,17 @@ public:
 protected:
 	virtual bool Init()
 	{
-		char hostname[MAX_DOMAIN_NAME+1];
-		if(!name) {
-			gethostname(hostname,MAX_DOMAIN_NAME);
-			char *dot = strchr(hostname,'.');
-			if(dot) *dot = 0;  // we want only the host name, no domain
-		}
-
 		DNSServiceErrorType err = DNSServiceResolve(
             &client,
 			0, // default renaming behaviour 
             interf < 0?kDNSServiceInterfaceIndexLocalOnly:kDNSServiceInterfaceIndexAny, 
-			name?GetString(name):hostname,
+			GetString(name),
 			GetString(type),
 			domain?GetString(domain):"local",
 			callback, this
 		);
+
+//        post("resolve install err==%i",err);
 
 		if(LIKELY(err == kDNSServiceErr_NoError)) {
 			FLEXT_ASSERT(client);
@@ -72,10 +67,14 @@ private:
         const char *txtRecord, 
         void *context)
 	{
+//        post("Resolve callback");
+
         ResolveWorker *w = (ResolveWorker *)context;
 		FLEXT_ASSERT(w->self);
 
 		if(LIKELY(errorCode == kDNSServiceErr_NoError)) {
+//            post("Resolve ok");
+
 			union { uint16_t s; unsigned char b[2]; } oport = { opaqueport };
 			uint16_t port = ((uint16_t)oport.b[0]) << 8 | oport.b[1];
 		
@@ -83,9 +82,9 @@ private:
 			strcpy(temp,fullname);
 			
 			t = getdot(t1 = temp);
-			FLEXT_ASSERT(t); // after host name           
+			FLEXT_ASSERT(t); // after service name           
             *t = 0;
-			const char *hostname = t1; // host name
+			const char *srvname = t1; // service name
 
 			t = getdot(t1 = t+1);
 			FLEXT_ASSERT(t); // middle dot in type
@@ -96,29 +95,15 @@ private:
 
 			const char *domain = t+1; // domain
 
-#if 0
-            addrinfo aiHints;
-            aiHints.ai_family = AF_UNSPEC;
-            aiHints.ai_socktype = 0;
-            aiHints.ai_protocol = 0;
-            aiHints.ai_addrlen = 0;
-            aiHints.ai_canonname = NULL;
-            aiHints.ai_addr = NULL;
-            aiHints.ai_next = NULL;
-            addrinfo *aiList = NULL;
-
-            if(getaddrinfo("127.0.0.1",port,&aiHints,&aiList) != 0) {
-                static_cast<ResolveBase *>(w->self)->OnResolve(hostname,type,domain,port,ifIndex,txtRecord && *txtRecord?txtRecord:NULL);
-            }
-#else
-            const hostent *he = gethostbyname(hostname);
+//            post("Resolve name %s",hosttarget);
+            const hostent *he = gethostbyname(hosttarget);
             if(he && he->h_length == 4) {
                 const unsigned char *addr = (unsigned char *)he->h_addr_list[0];
                 char ipaddr[16];
                 sprintf(ipaddr,"%03i.%03i.%03i.%03i",addr[0],addr[1],addr[2],addr[3]);
-                static_cast<ResolveBase *>(w->self)->OnResolve(hostname,ipaddr,type,domain,port,ifIndex,txtRecord && *txtRecord?txtRecord:NULL);
+//                post("Resolve %s %i",ipaddr,port);
+                static_cast<ResolveBase *>(w->self)->OnResolve(srvname,hosttarget,ipaddr,type,domain,port,ifIndex,txtRecord && *txtRecord?txtRecord:NULL);
             }
-#endif
 		}
 		else
 			static_cast<ResolveBase *>(w->self)->OnError(errorCode);
@@ -153,12 +138,12 @@ public:
 	{
         if(argc == 0)
             Stop();
-        else if(argc < 1 || !IsSymbol(argv[0])) {
-			post("%s - %s: type (like _ssh._tcp or _osc._udp) must be given",thisName(),GetString(thisTag()));
+        else if(argc < 2 || !IsSymbol(argv[0]) || !IsSymbol(argv[1])) {
+			post("%s - %s: type (like _ssh._tcp or _osc._udp) and servicename must be given",thisName(),GetString(thisTag()));
 		}
         else {
 		    Symbol type = GetSymbol(argv[0]);
-		    Symbol name = argc >= 3?GetASymbol(argv[1]):NULL;
+		    Symbol name = GetASymbol(argv[1]);
             Symbol domain = argc >= 3?GetASymbol(argv[2]):NULL;
             int interf = argc >= 4?GetAInt(argv[3]):0;
 
@@ -170,17 +155,18 @@ protected:
 
 	static Symbol sym_resolve;
 
-    virtual void OnResolve(const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,const char *txtRecord)
+    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,const char *txtRecord)
     {
-		t_atom at[7];
-        SetString(at[0],hostname); // host name
-        SetString(at[1],ipaddr); // host name
-        SetString(at[2],type); // type
-        SetString(at[3],domain); // domain
-		SetInt(at[4],port);
-		SetInt(at[5],ifix);
-		if(txtRecord) SetString(at[6],txtRecord);
-		ToQueueAnything(GetOutAttr(),sym_resolve,txtRecord?7:6,at);
+		t_atom at[8];
+        SetString(at[0],srvname); // host name
+        SetString(at[1],type); // type
+        SetString(at[2],domain); // domain
+		SetInt(at[3],ifix);
+        SetString(at[4],hostname); // host name
+        SetString(at[5],ipaddr); // host name
+		SetInt(at[6],port);
+		if(txtRecord) SetString(at[7],txtRecord);
+		ToQueueAnything(GetOutAttr(),sym_resolve,txtRecord?8:7,at);
     }
 
 	FLEXT_CALLBACK_V(m_resolve)

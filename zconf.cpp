@@ -8,7 +8,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.1.3"
+#define ZCONF_VERSION "0.1.4"
 
 namespace zconf {
 
@@ -212,8 +212,8 @@ t_int Base::idlefun(t_int *)
 		if(result > 0) {
 			for(Workers::iterator it = workers->begin(); it != workers->end(); ++it) {
 				Worker *w = *it;
-//				fprintf(stderr,"%p %p",w,w?w->fd:NULL);
 				if(w->fd >= 0 && FD_ISSET(w->fd,&readfds)) {
+//                    post("file selector set");
 					DNSServiceErrorType err = DNSServiceProcessResult(w->client);
 					if(UNLIKELY(err)) {
 						post("DNSServiceProcessResult call failed: %i",err);

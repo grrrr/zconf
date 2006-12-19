@@ -70,6 +70,7 @@
 			CharacterSet="2">
 			<Tool
 				Name="VCCLCompilerTool"
+				AdditionalIncludeDirectories="..\flext\source"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;ZCONF_EXPORTS"
 				RuntimeLibrary="4"
 				UsePrecompiledHeader="0"
