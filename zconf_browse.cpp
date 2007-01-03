@@ -169,9 +169,9 @@ protected:
     virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add,bool more)
     {
         t_atom at[5]; 
-		SetString(at[0],name);
+		SetString(at[0],DNSUnescape(name).c_str());
 		SetString(at[1],type);
-		SetString(at[2],domain);
+		SetString(at[2],DNSUnescape(domain).c_str());
 		SetInt(at[3],ifix);
 		SetBool(at[4],more);
 		ToQueueAnything(GetOutAttr(),add?sym_add:sym_remove,5,at);

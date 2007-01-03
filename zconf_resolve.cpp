@@ -157,21 +157,21 @@ protected:
 
     virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord)
     {
-        bool hastxtrec = txtRecord && txtLen;
+        bool hastxtrec = txtRecord && txtLen && *txtRecord;
 		t_atom at[8];
-        SetString(at[0],srvname); // host name
+        SetString(at[0],DNSUnescape(srvname).c_str()); // host name
         SetString(at[1],type); // type
-        SetString(at[2],domain); // domain
+        SetString(at[2],DNSUnescape(domain).c_str()); // domain
 		SetInt(at[3],ifix);
-        SetString(at[4],hostname); // host name
-        SetString(at[5],ipaddr); // host name
+        SetString(at[4],DNSUnescape(hostname).c_str()); // host name
+        SetString(at[5],ipaddr); // ip address
 		SetInt(at[6],port);
         SetBool(at[7],hastxtrec);
 		ToQueueAnything(GetOutAttr(),sym_resolve,8,at);
         if(hastxtrec) {
             for(int i = 0; i < txtLen; ++i) {
                 char txt[256];
-                int l = txtRecord[i];
+                int l = ((const unsigned char *)txtRecord)[i];
                 memcpy(txt,txtRecord+i+1,l);
                 txt[l] = 0;
                 char *ass = strchr(txt,'=');

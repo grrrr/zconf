@@ -27,14 +27,17 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 #include <dns_sd.h>
 
 #include <vector>
+#include <string>
 
 namespace zconf {
 
 #define MAX_DOMAIN_LABEL 63
 #define MAX_DOMAIN_NAME 255
 
-
 typedef const t_symbol *Symbol;
+
+std::string DNSEscape(const char *txt,bool escdot = true);
+std::string DNSUnescape(const char *txt);
 
 class Worker
 	: public flext

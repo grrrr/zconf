@@ -1,4 +1,4 @@
-#N canvas 37 20 953 814 12;
+#N canvas 37 22 965 826 12;
 #X obj 17 10 cnv 15 900 45 empty empty zconf 10 22 0 24 -260818 -1
 0;
 #X text 263 33 http://grrrr.org;
@@ -17,7 +17,7 @@
 #X text 56 143 domains for registration;
 #X obj 32 338 zconf.meta;
 #X obj 32 360 print META;
-#X obj 32 315 tgl 15 0 empty empty empty 0 -6 0 8 -262144 -1 -1 1 1
+#X obj 32 315 tgl 15 0 empty empty empty 0 -6 0 8 -262144 -1 -1 0 1
 ;
 #X msg 50 312 active \$1;
 #X text 30 290 browse for all available services;
@@ -33,25 +33,25 @@
 #X text 54 420 unregistration of services;
 #X obj 17 462 cnv 15 400 320 empty empty empty 10 22 0 24 -233017 -1
 0;
-#X obj 30 663 zconf.service;
-#X obj 30 685 print SERVICE;
-#X text 42 558 optional;
-#X msg 45 579 name player;
-#X msg 155 579 getname;
-#X msg 45 601 domain local;
-#X msg 155 601 getdomain;
-#X text 235 602 domain;
-#X msg 30 523 gettype \, getport;
+#X obj 31 676 zconf.service;
+#X obj 31 698 print SERVICE;
+#X text 27 544 optional;
+#X msg 97 551 name player;
+#X msg 207 551 getname;
+#X msg 97 573 domain local;
+#X msg 207 573 getdomain;
+#X text 287 574 domain;
+#X msg 30 520 gettype \, getport;
 #X text 28 755 the parameters are complete and unchanged.;
-#X text 28 738 The service remains registered as long as;
-#X text 268 526 unregister;
-#X msg 285 500 type;
-#X text 261 624 interface;
-#X msg 155 623 getinterface;
-#X msg 30 500 type _osc._udp \, port 8765;
-#X msg 45 623 interface -1;
-#X text 235 580 service name;
-#X text 29 705 service servicename type domain;
+#X text 28 739 The service remains registered as long as;
+#X text 248 525 unregister;
+#X msg 265 499 type;
+#X text 314 604 interface;
+#X msg 207 595 getinterface;
+#X msg 30 497 type _osc._udp \, port 8765;
+#X msg 97 595 interface -1;
+#X text 287 552 service name;
+#X text 28 722 service servicename type domain;
 #X obj 435 68 cnv 15 480 350 empty empty empty 10 22 0 24 -233017 -1
 0;
 #X obj 449 298 zconf.browse;
@@ -78,7 +78,6 @@
 #X msg 686 273 interface 2;
 #X text 783 272 some other;
 #X text 783 227 any (default);
-#X msg 449 231 type _http._tcp;
 #X text 447 341 add/remove servicename type domain interface more_coming
 ;
 #X obj 435 432 cnv 15 480 350 empty empty empty 10 22 0 24 -233017
@@ -117,6 +116,12 @@
 #X text 445 664 txtrecord recordname data;
 #X text 446 643 resolve servicename type domain interface host ip port
 rec;
+#X msg 449 231 type _ipp._tcp;
+#X msg 96 650 gettxtrecord;
+#X msg 206 650 gettxtrecord txtvers;
+#X msg 96 626 txtrecord txtvers 1;
+#X msg 267 626 txtrecord txtvers;
+#X text 210 672 text records;
 #X connect 4 0 5 0;
 #X connect 6 0 4 0;
 #X connect 7 0 4 0;
@@ -139,7 +144,7 @@ rec;
 #X connect 43 0 28 0;
 #X connect 44 0 28 0;
 #X connect 48 0 49 0;
-#X connect 48 0 84 0;
+#X connect 48 0 83 0;
 #X connect 50 0 48 0;
 #X connect 51 0 48 0;
 #X connect 52 0 48 0;
@@ -152,13 +157,17 @@ rec;
 #X connect 66 0 48 0;
 #X connect 67 0 48 0;
 #X connect 68 0 48 0;
-#X connect 71 0 48 0;
-#X connect 74 0 75 0;
-#X connect 81 0 74 0;
-#X connect 82 0 74 0;
-#X connect 83 0 74 0;
-#X connect 84 0 86 0;
-#X connect 85 0 74 0;
-#X connect 86 0 85 0;
-#X connect 98 0 74 0;
-#X connect 100 0 48 0;
+#X connect 73 0 74 0;
+#X connect 80 0 73 0;
+#X connect 81 0 73 0;
+#X connect 82 0 73 0;
+#X connect 83 0 85 0;
+#X connect 84 0 73 0;
+#X connect 85 0 84 0;
+#X connect 97 0 73 0;
+#X connect 99 0 48 0;
+#X connect 102 0 48 0;
+#X connect 103 0 28 0;
+#X connect 104 0 28 0;
+#X connect 105 0 28 0;
+#X connect 106 0 28 0;

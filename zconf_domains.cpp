@@ -114,7 +114,7 @@ protected:
     virtual void OnDomain(const char *domain,int ifix,bool add,bool more)
     {
         t_atom at[3]; 
-		SetString(at[0],domain);
+		SetString(at[0],DNSUnescape(domain).c_str());
 		SetInt(at[1],ifix);
 		SetBool(at[2],more);
 		ToQueueAnything(GetOutAttr(),add?sym_add:sym_remove,3,at);

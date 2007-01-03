@@ -7,6 +7,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 */
 
 #include "zconf.h"
+#include <map>
 
 namespace zconf {
 
@@ -21,9 +22,9 @@ class ServiceWorker
 	: public Worker
 {
 public:
-	ServiceWorker(ServiceBase *s,Symbol n,Symbol t,Symbol d,int p,int i)
+	ServiceWorker(ServiceBase *s,Symbol n,Symbol t,Symbol d,int p,int i,const std::string &txt)
 		: Worker(s)
-		, name(n),type(t),domain(d),interf(i),port(p)
+		, name(n),type(t),domain(d),interf(i),port(p),txtrec(txt)
 	{}
 	
 protected:
@@ -33,6 +34,7 @@ protected:
 	{
 		uint16_t PortAsNumber	= port;
 		Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
+		int txtlen = txtrec.length();
 
 		DNSServiceErrorType err = DNSServiceRegister(
 			&client, 
@@ -43,7 +45,7 @@ protected:
 			domain?GetString(domain):NULL,
 			NULL, // host
 			registerPort.NotAnInteger,
-			0, NULL,  // txtlen,txtrecord 
+			txtlen, txtlen?txtrec.c_str():NULL,
 			(DNSServiceRegisterReply)&callback, this
 		);
 
@@ -59,6 +61,7 @@ protected:
 	
 	Symbol name,type,domain,text;
     int interf,port;
+	std::string txtrec;
 
 private:
     static void DNSSD_API callback(
@@ -203,39 +206,115 @@ public:
 			Update();
 		}
 	}
-    /*
-	void ms_text(const AtomList &args)
-	{
-		Symbol t;
-		if(!args.Count())
-			t = NULL;
-		if(args.Count() == 1 && IsSymbol(args[0]))
-			t = GetSymbol(args[0]);
-		else {
-			post("%s - text [symbol]",thisName());
-			return;
-		}
 
-		if(t != text) {
-			text = t;
-			Update();
+protected:
+	typedef std::map<Symbol,std::string> Textrecords;
+
+public:
+	void ms_txtrecord(int argc,const t_atom *argv)
+	{
+		bool upd = false;
+		if(!argc) {
+			if(txtrec.size()) {
+				txtrec.clear();
+				upd = true;
+			}
 		}
+		else if(IsSymbol(*argv)) {
+			Symbol key = GetSymbol(*argv++); --argc;
+			if(!argc) {
+				Textrecords::iterator it = txtrec.find(key);
+				if(it != txtrec.end()) {
+					txtrec.erase(it);
+					upd = true;
+				}
+			}
+			else {
+				std::string txt;
+				while(argc) {
+					if(IsString(*argv)) {
+						txt += GetString(*argv++);
+						--argc;
+						if(argc) txt += ' ';
+					}
+					else if(CanbeFloat(*argv)) {
+						char num[32];
+						sprintf(num,"%g",GetAFloat(*argv++));
+						--argc;
+						txt += num;
+						if(argc) txt += ' ';
+					}
+					else
+						++argv,--argc;
+				}
+				txtrec[key] = txt;
+				upd = true;
+			}
+		}
+		else
+			post("%s %s - textrecord key must be a symbol",thisName(),GetString(thisTag()));
+			
+		if(upd) Update();
 	}
 
-	void mg_text(AtomList &args) const { if(text) { args(1); SetSymbol(args[0],text); } }
-*/
+	void mg_txtrecord(int argc,const t_atom *argv) 
+	{
+		if(!argc) {
+			// dump all textrecord entries
+			for(Textrecords::const_iterator it = txtrec.begin(); it != txtrec.end(); ++it)
+				dumprec(it);
+			ToQueueAnything(GetOutAttr(),sym_txtrecord,0,NULL);
+		}
+		else if(argc == 1 && IsSymbol(*argv)) {
+			Symbol s = GetSymbol(*argv);
+			Textrecords::const_iterator it = txtrec.find(s);
+			if(it != txtrec.end()) 
+				dumprec(it);
+			else
+				post("%s %s - textrecord %s not found",thisName(),GetString(thisTag()),GetString(s));
+		}
+		else
+			post("%s %s - textrecord key must be a symbol (or empty)",thisName(),GetString(thisTag()));
+	}
 
 protected:
 
-	static Symbol sym_service;
+	void dumprec(Textrecords::const_iterator it)
+	{
+		t_atom at[2];
+		SetSymbol(at[0],it->first);
+		SetString(at[1],it->second.c_str());
+		ToQueueAnything(GetOutAttr(),sym_txtrecord,2,at);
+	}
+	
+	std::string makerec()
+	{
+		std::string ret;
+		for(Textrecords::const_iterator it = txtrec.begin(); it != txtrec.end(); ++it) {
+			const char *k = GetString(it->first);
+			int len = strlen(k)+1+it->second.length();
+			if(ret.length() > 255) {
+				post("txtrecord %s too long!",k);
+				continue;
+			}
+			ret += (char)(unsigned char)len;
+			ret += k;
+			ret += '=';
+			ret += it->second;
+		}
+		return ret;
+	}
+
+	static Symbol sym_service,sym_txtrecord;
 
 	Symbol name,type,domain;
     int interf,port;
+	Textrecords txtrec;
 	
 	virtual void Update()
 	{
 		if(type)
-			Install(new ServiceWorker(this,name,type,domain,port,interf));
+			Install(new ServiceWorker(this,name,type,domain,port,interf,makerec()));
 		else
 			Stop();
 	}
@@ -245,7 +324,7 @@ protected:
 		t_atom at[3];
 		SetString(at[0],name);
 		SetString(at[1],type);
-		SetString(at[2],domain);
+		SetString(at[2],DNSUnescape(domain).c_str());
 		ToQueueAnything(GetOutAttr(),sym_service,3,at);
 	}
 
@@ -256,22 +335,25 @@ protected:
 	FLEXT_ATTRGET_I(port)
 	FLEXT_CALLSET_I(ms_interface)
 	FLEXT_ATTRGET_I(interf)
-//	FLEXT_CALLVAR_V(mg_text,ms_text)
+	FLEXT_CALLBACK_V(ms_txtrecord)
+	FLEXT_CALLBACK_V(mg_txtrecord)
 	
 	static void Setup(t_classid c)
 	{
 		sym_service = MakeSymbol("service");
+		sym_txtrecord = MakeSymbol("txtrecord");
 	
 		FLEXT_CADDATTR_VAR(c,"name",mg_name,ms_name);
 		FLEXT_CADDATTR_VAR(c,"port",port,ms_port);
 		FLEXT_CADDATTR_VAR(c,"type",mg_type,ms_type);
 		FLEXT_CADDATTR_VAR(c,"domain",mg_domain,ms_domain);
 		FLEXT_CADDATTR_VAR(c,"interface",interf,ms_interface);
-//		FLEXT_CADDATTR_VAR(c,"txt",mg_text,ms_text);
+		FLEXT_CADDMETHOD_(c,0,sym_txtrecord,ms_txtrecord);
+		FLEXT_CADDMETHOD_(c,0,"gettxtrecord",mg_txtrecord);
 	}
 };
 
-Symbol Service::sym_service;
+Symbol Service::sym_service,Service::sym_txtrecord;
 
 FLEXT_LIB_V("zconf.service",Service)
 

@@ -12,6 +12,59 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 namespace zconf {
 
+// unescape a DNS-escaped string and make a symbol
+// http://www.faqs.org/rfcs/rfc1035.html, section 5.1
+std::string DNSEscape(const char *txt,bool escdot)
+{
+	std::string ret;
+	for(const char *c = txt; *c; ++c) {
+		// \TODO: here, the choice of characters to escape is tentative... look up which ones should be really escaped
+		if((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9') || strchr("_-+",*c) || (!escdot && *c == '.'))
+			ret += *c;
+		else {
+			ret += '\\';
+			if(strchr(".\\/!?=*#:;,&%()<>",*c))
+				ret += *c;
+			else {
+				int d = *c;
+				ret += (char)(unsigned char)(d/100);
+				ret += (char)(unsigned char)((d/10)%10);
+				ret += (char)(unsigned char)(d%10);
+			}
+		}
+	}
+	return ret;
+}
+
+std::string DNSUnescape(const char *txt)
+{
+	std::string ret;
+	const char *c = txt;
+	bool esc = false;
+	while(*c) {
+		if(esc) {
+			if(*c >= '0' && *c <= '9') {
+				// decimal code
+				int d = (*c++)-'0';
+				d = d*10+(*c++)-'0';
+				d = d*10+(*c++)-'0';
+				ret += (char)(unsigned char)d;
+			}
+			else
+				// escaped special char (like .)
+				ret += *(c++);
+			esc = false;
+		}
+		else if(*c == '\\') {
+			esc = true;
+			c++;
+		}
+		else
+			ret += *(c++);
+	}
+	return ret;
+}
+
 ////////////////////////////////////////////////
 
 Worker::~Worker()

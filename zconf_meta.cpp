@@ -128,7 +128,7 @@ protected:
     {
         t_atom at[4]; 
 		SetString(at[0],type);
-		SetString(at[1],domain);
+		SetString(at[1],DNSUnescape(domain).c_str());
 		SetInt(at[2],interf);
         SetBool(at[3],more);
 		ToQueueAnything(GetOutAttr(),add?sym_add:sym_remove,4,at);
