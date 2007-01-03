@@ -1,7 +1,7 @@
 /* 
 zconf - zeroconf networking objects
 
-Copyright (c)2006 Thomas Grill (gr@grrrr.org)
+Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
 */
@@ -14,7 +14,7 @@ class ResolveBase
 	: public Base
 {
 public:
-    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,const char *txtRecord) = 0;
+    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord) = 0;
 };
 
 class ResolveWorker
@@ -102,7 +102,7 @@ private:
                 char ipaddr[16];
                 sprintf(ipaddr,"%03i.%03i.%03i.%03i",addr[0],addr[1],addr[2],addr[3]);
 //                post("Resolve %s %i",ipaddr,port);
-                static_cast<ResolveBase *>(w->self)->OnResolve(srvname,hosttarget,ipaddr,type,domain,port,ifIndex,txtRecord && *txtRecord?txtRecord:NULL);
+                static_cast<ResolveBase *>(w->self)->OnResolve(srvname,hosttarget,ipaddr,type,domain,port,ifIndex,txtLen,txtRecord);
             }
 		}
 		else
@@ -153,10 +153,11 @@ public:
 
 protected:
 
-	static Symbol sym_resolve;
+	static Symbol sym_resolve,sym_txtrecord;
 
-    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,const char *txtRecord)
+    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord)
     {
+        bool hastxtrec = txtRecord && txtLen;
 		t_atom at[8];
         SetString(at[0],srvname); // host name
         SetString(at[1],type); // type
@@ -165,8 +166,25 @@ protected:
         SetString(at[4],hostname); // host name
         SetString(at[5],ipaddr); // host name
 		SetInt(at[6],port);
-		if(txtRecord) SetString(at[7],txtRecord);
-		ToQueueAnything(GetOutAttr(),sym_resolve,txtRecord?8:7,at);
+        SetBool(at[7],hastxtrec);
+		ToQueueAnything(GetOutAttr(),sym_resolve,8,at);
+        if(hastxtrec) {
+            for(int i = 0; i < txtLen; ++i) {
+                char txt[256];
+                int l = txtRecord[i];
+                memcpy(txt,txtRecord+i+1,l);
+                txt[l] = 0;
+                char *ass = strchr(txt,'=');
+                if(ass) { 
+                    *ass = 0;
+                    SetString(at[1],ass+1);
+                }
+                SetString(at[0],txt);
+                ToQueueAnything(GetOutAttr(),sym_txtrecord,ass?2:1,at);
+                i += l;
+            }
+    		ToQueueAnything(GetOutAttr(),sym_txtrecord,0,NULL);
+        }
     }
 
 	FLEXT_CALLBACK_V(m_resolve)
@@ -174,12 +192,13 @@ protected:
 	static void Setup(t_classid c)
 	{
 		sym_resolve = MakeSymbol("resolve");
+		sym_txtrecord = MakeSymbol("txtrecord");
 	
 		FLEXT_CADDMETHOD_(c,0,sym_resolve,m_resolve);
 	}
 };
 
-Symbol Resolve::sym_resolve;
+Symbol Resolve::sym_resolve,Resolve::sym_txtrecord;
 
 FLEXT_LIB("zconf.resolve",Resolve)
 

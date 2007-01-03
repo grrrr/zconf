@@ -1,14 +1,14 @@
 /* 
 zconf - zeroconf networking objects
 
-Copyright (c)2006 Thomas Grill (gr@grrrr.org)
+Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
 */
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.1.4"
+#define ZCONF_VERSION "0.1.5"
 
 namespace zconf {
 
@@ -243,14 +243,14 @@ void Base::Setup(t_classid)
 
 static void main()
 {
-	flext::post("----------------------------------");
+	flext::post("---------------------------------------");
 	flext::post("zconf - zeroconfig objects");
-    flext::post("version " ZCONF_VERSION " (c)2006 Thomas Grill");
+    flext::post("version " ZCONF_VERSION " (c)2006,2007 Thomas Grill");
 #ifdef FLEXT_DEBUG
     flext::post("");
     flext::post("DEBUG BUILD - " __DATE__ " " __TIME__);
 #endif
-	flext::post("----------------------------------");
+	flext::post("---------------------------------------");
 
 	// call the objects' setup routines
 	FLEXT_SETUP(Domains);
