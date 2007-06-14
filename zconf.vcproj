@@ -19,7 +19,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;c:\data\pd\pd-cvs\src&quot;;..\flext\source;&quot;C:\data\prog\packs\Bonjour SDK\include&quot;"
+				AdditionalIncludeDirectories="&quot;$(pdmax)\pd\src&quot;;..\flext\source;&quot;$(prereq)\Bonjour SDK\include&quot;"
 				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;FLEXT_SYS=2"
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"
@@ -35,7 +35,7 @@
 				AdditionalDependencies="pd.lib dnssd.lib Ws2_32.lib"
 				OutputFile="$(OutDir)/zconf.dll"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="&quot;c:\data\pd\pd-cvs\bin&quot;;&quot;C:\data\prog\packs\Bonjour SDK\lib&quot;"
+				AdditionalLibraryDirectories="&quot;$(pdmax)\pd\bin&quot;;&quot;$(prereq)\Bonjour SDK\lib&quot;"
 				GenerateDebugInformation="TRUE"
 				ProgramDatabaseFile="$(OutDir)/zconf.pdb"
 				SubSystem="2"

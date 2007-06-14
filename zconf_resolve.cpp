@@ -118,7 +118,16 @@ private:
         for(char *t = txt; *t; ++t) {
             if(*t == '\\')
                 escaped = !escaped;
-            else if(*t == '.' && !escaped)
+			else if(escaped) {
+				if(isdigit(*t)) {
+					// three digits if escaping
+					if(!isdigit(*++t)) return NULL;
+					if(!isdigit(*++t)) return NULL;
+				}
+
+				escaped = false;
+			}
+			else if(*t == '.')
                 return t;
         }
         return NULL;
