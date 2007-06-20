@@ -209,6 +209,6 @@ protected:
 
 Symbol Resolve::sym_resolve,Resolve::sym_txtrecord;
 
-FLEXT_LIB("zconf.resolve",Resolve)
+FLEXT_LIB("zconf.resolve, zconf",Resolve)
 
 } // namespace

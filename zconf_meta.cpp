@@ -146,7 +146,7 @@ protected:
 	}
 };
 
-FLEXT_LIB("zconf.meta",Meta)
+FLEXT_LIB("zconf.meta, zconf",Meta)
 
 } //namespace
 

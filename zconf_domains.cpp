@@ -132,6 +132,6 @@ protected:
 	}
 };
 
-FLEXT_LIB("zconf.domains",Domains)
+FLEXT_LIB("zconf.domains, zconf",Domains)
 
 } //namespace

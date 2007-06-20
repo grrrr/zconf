@@ -355,6 +355,6 @@ protected:
 
 Symbol Service::sym_service,Service::sym_txtrecord;
 
-FLEXT_LIB_V("zconf.service",Service)
+FLEXT_LIB_V("zconf.service, zconf",Service)
 
 } // namespace

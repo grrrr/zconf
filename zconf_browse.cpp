@@ -190,7 +190,7 @@ protected:
 	}
 };
 
-FLEXT_LIB_V("zconf.browse",Browse)
+FLEXT_LIB_V("zconf.browse, zconf",Browse)
 
 } //namespace
 
