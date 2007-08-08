@@ -183,6 +183,7 @@ Base::~Base()
 	Stop();
 }
 
+// can be called from a secondary thread
 void Base::OnError(DNSServiceErrorType error)
 {
 	const char *errtxt;

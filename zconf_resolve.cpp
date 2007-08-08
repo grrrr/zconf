@@ -164,6 +164,7 @@ protected:
 
 	static Symbol sym_resolve,sym_txtrecord;
 
+	// can be called from a secondary thread
     virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord)
     {
         bool hastxtrec = txtRecord && txtLen && *txtRecord;

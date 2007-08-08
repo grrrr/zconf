@@ -124,6 +124,7 @@ protected:
 			Stop();
 	}
 
+	// can be called from a secondary thread
     virtual void OnMeta(const char *type,const char *domain,int interf,bool add,bool more)
     {
         t_atom at[4]; 

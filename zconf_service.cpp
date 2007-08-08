@@ -319,6 +319,7 @@ protected:
 			Stop();
 	}
 
+	// can be called from a secondary thread
 	virtual void OnRegister(const char *name,const char *type,const char *domain)
 	{
 		t_atom at[3];

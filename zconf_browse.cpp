@@ -166,6 +166,7 @@ protected:
 			Stop();
 	}
 
+	// can be called from a secondary thread
     virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add,bool more)
     {
         t_atom at[5]; 
