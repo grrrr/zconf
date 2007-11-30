@@ -4,26 +4,22 @@ zconf - zeroconf networking objects
 Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
+
+$LastChangedRevision$
+$LastChangedDate$
+$LastChangedBy$
 */
 
 #include "zconf.h"
 
 namespace zconf {
 
-class DomainsBase
-	: public Base
-{
-public:
-    virtual void OnDomain(const char *domain,int ifix,bool add,bool more) = 0;
-};
-
 class DomainsWorker
 	: public Worker
 {
 public:
-	DomainsWorker(DomainsBase *s,int i,bool reg)
-		: Worker(s)
-        , interf(i),regdomains(reg)
+	DomainsWorker(int i,bool reg)
+        : interf(i),regdomains(reg)
 	{}
 	
 protected:
@@ -44,7 +40,7 @@ protected:
 			return Worker::Init();
 		}
 		else {
-			static_cast<DomainsBase *>(self)->OnError(err);
+			OnError(err);
 			return false;
 		}
 	} 
@@ -60,19 +56,27 @@ private:
         void *context)
     {
         DomainsWorker *w = (DomainsWorker *)context;
-		FLEXT_ASSERT(w->self);
 		if(LIKELY(errorCode == kDNSServiceErr_NoError))
-			static_cast<DomainsBase *>(w->self)->OnDomain(replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0,(flags & kDNSServiceFlagsMoreComing) != 0);
+			w->OnDomain(replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0,(flags & kDNSServiceFlagsMoreComing) != 0);
 		else
-			static_cast<DomainsBase *>(w->self)->OnError(errorCode);
+			w->OnError(errorCode);
     }
 
+	// can be called from a secondary thread
+    void OnDomain(const char *domain,int ifix,bool add,bool more)
+    {
+        t_atom at[3]; 
+		SetString(at[0],DNSUnescape(domain).c_str());
+		SetInt(at[1],ifix);
+		SetBool(at[2],more);
+		Message(add?sym_add:sym_remove,3,at);
+    }
 };
 
 class Domains
-	: public DomainsBase
+	: public Base
 {
-	FLEXT_HEADER_S(Domains,DomainsBase,Setup)
+	FLEXT_HEADER_S(Domains,Base,Setup)
 public:
 
 	Domains()
@@ -105,21 +109,8 @@ protected:
 
 	void Update()
 	{
-        if(mode)
-            Install(new DomainsWorker(this,interf,mode == 2));
-        else
-            Stop();
+        Install(mode?new DomainsWorker(interf,mode == 2):NULL);
 	}
-
-	// can be called from a secondary thread
-    virtual void OnDomain(const char *domain,int ifix,bool add,bool more)
-    {
-        t_atom at[3]; 
-		SetString(at[0],DNSUnescape(domain).c_str());
-		SetInt(at[1],ifix);
-		SetBool(at[2],more);
-		ToQueueAnything(GetOutAttr(),add?sym_add:sym_remove,3,at);
-    }
 
     FLEXT_ATTRGET_I(mode)
     FLEXT_CALLSET_I(ms_mode)

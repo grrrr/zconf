@@ -120,7 +120,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;$(prereq)\pthreads\include&quot;;&quot;$(pdmax)\pd\src&quot;;..\flext\source;&quot;$(prereq)\Bonjour SDK\include&quot;"
+				EnableIntrinsicFunctions="TRUE"
+				AdditionalIncludeDirectories="&quot;$(prereq)\pthreads\include&quot;;&quot;$(pdmax)\pd\src&quot;;..\flext\source;&quot;$(prereq)\Bonjour SDK\include&quot;;C:\data\libs\boost_1_33_1;C:\data\nova\libs\lockfree"
 				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;FLEXT_SYS=2;FLEXT_THREADS"
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"

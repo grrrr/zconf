@@ -4,26 +4,22 @@ zconf - zeroconf networking objects
 Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
+
+$LastChangedRevision$
+$LastChangedDate$
+$LastChangedBy$
 */
 
 #include "zconf.h"
 
 namespace zconf {
 
-class BrowseBase
-	: public Base
-{
-public:
-    virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add,bool more) = 0;
-};
-
 class BrowseWorker
 	: public Worker
 {
 public:
-	BrowseWorker(BrowseBase *s,Symbol t,Symbol d,int i)
-		: Worker(s)
-		, type(t),domain(d),interf(i)
+	BrowseWorker(Symbol t,Symbol d,int i)
+        : type(t),domain(d),interf(i)
 	{}
 	
 protected:
@@ -43,7 +39,7 @@ protected:
 			return Worker::Init();
 		}
 		else {
-			static_cast<BrowseBase *>(self)->OnError(err);
+			OnError(err);
 			return false;
 		}
 	} 
@@ -63,20 +59,29 @@ private:
         void *context)
     {
         BrowseWorker *w = (BrowseWorker *)context;
-		FLEXT_ASSERT(w->self);
-		
 		if(LIKELY(errorCode == kDNSServiceErr_NoError))
-			static_cast<BrowseBase *>(w->self)->OnBrowse(replyName,replyType,replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0,(flags & kDNSServiceFlagsMoreComing) != 0);
+			w->OnBrowse(replyName,replyType,replyDomain,ifIndex,(flags & kDNSServiceFlagsAdd) != 0,(flags & kDNSServiceFlagsMoreComing) != 0);
 		else
-			static_cast<BrowseBase *>(w->self)->OnError(errorCode);
+			w->OnError(errorCode);
     }
 
+	// can be called from a secondary thread
+    void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add,bool more)
+    {
+        t_atom at[5]; 
+		SetString(at[0],DNSUnescape(name).c_str());
+		SetString(at[1],type);
+		SetString(at[2],DNSUnescape(domain).c_str());
+		SetInt(at[3],ifix);
+		SetBool(at[4],more);
+		Message(add?sym_add:sym_remove,5,at);
+    }
 };
 
 class Browse
-	: public BrowseBase
+	: public Base
 {
-	FLEXT_HEADER_S(Browse,BrowseBase,Setup)
+	FLEXT_HEADER_S(Browse,Base,Setup)
 public:
 
 	Browse(int argc,const t_atom *argv)
@@ -160,23 +165,8 @@ protected:
 	
 	virtual void Update()
 	{
-		if(type)
-			Install(new BrowseWorker(this,type,domain,interf));
-		else
-			Stop();
+        Install(type?new BrowseWorker(type,domain,interf):NULL);
 	}
-
-	// can be called from a secondary thread
-    virtual void OnBrowse(const char *name,const char *type,const char *domain,int ifix,bool add,bool more)
-    {
-        t_atom at[5]; 
-		SetString(at[0],DNSUnescape(name).c_str());
-		SetString(at[1],type);
-		SetString(at[2],DNSUnescape(domain).c_str());
-		SetInt(at[3],ifix);
-		SetBool(at[4],more);
-		ToQueueAnything(GetOutAttr(),add?sym_add:sym_remove,5,at);
-    }
 
 	FLEXT_CALLVAR_V(mg_type,ms_type)
 	FLEXT_CALLVAR_V(mg_domain,ms_domain)

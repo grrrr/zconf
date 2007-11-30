@@ -4,6 +4,10 @@ zconf - zeroconf networking objects
 Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
+
+$LastChangedRevision$
+$LastChangedDate$
+$LastChangedBy$
 */
 
 #include "zconf.h"
@@ -11,20 +15,14 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 namespace zconf {
 
-class ServiceBase
-	: public Base
-{
-public:
-	virtual void OnRegister(const char *name,const char *type,const char *domain) = 0;
-};
+static Symbol sym_service,sym_txtrecord;
 
 class ServiceWorker
 	: public Worker
 {
 public:
-	ServiceWorker(ServiceBase *s,Symbol n,Symbol t,Symbol d,int p,int i,const std::string &txt)
-		: Worker(s)
-		, name(n),type(t),domain(d),interf(i),port(p),txtrec(txt)
+	ServiceWorker(Symbol n,Symbol t,Symbol d,int p,int i,const std::string &txt)
+        : name(n),type(t),domain(d),interf(i),port(p),txtrec(txt)
 	{}
 	
 protected:
@@ -34,7 +32,7 @@ protected:
 	{
 		uint16_t PortAsNumber	= port;
 		Opaque16 registerPort   = { { PortAsNumber >> 8, PortAsNumber & 0xFF } };
-		int txtlen = txtrec.length();
+		int txtlen = (int)txtrec.length();
 
 		DNSServiceErrorType err = DNSServiceRegister(
 			&client, 
@@ -54,7 +52,7 @@ protected:
 			return Worker::Init();
 		}
 		else {
-			static_cast<ServiceBase *>(self)->OnError(err);
+			OnError(err);
 			return false;
 		}
 	} 
@@ -75,19 +73,27 @@ private:
 	{
         // do something with the values that have been registered
         ServiceWorker *w = (ServiceWorker *)context;
-		FLEXT_ASSERT(w->self);
 		
 		if(LIKELY(errorCode == kDNSServiceErr_NoError))
-			static_cast<ServiceBase *>(w->self)->OnRegister(name,regtype,domain);
+			w->OnRegister(name,regtype,domain);
 		else
-			static_cast<ServiceBase *>(w->self)->OnError(errorCode);
+			w->OnError(errorCode);
 	}
+
+	void OnRegister(const char *name,const char *type,const char *domain)
+    {
+		t_atom at[3];
+		SetString(at[0],name);
+		SetString(at[1],type);
+		SetString(at[2],DNSUnescape(domain).c_str());
+		Message(sym_service,3,at);
+    }
 };
 
 class Service
-	: public ServiceBase
+	: public Base
 {
-	FLEXT_HEADER_S(Service,ServiceBase,Setup)
+	FLEXT_HEADER_S(Service,Base,Setup)
 public:
 
 	Service(int argc,const t_atom *argv)
@@ -292,7 +298,7 @@ protected:
 		std::string ret;
 		for(Textrecords::const_iterator it = txtrec.begin(); it != txtrec.end(); ++it) {
 			const char *k = GetString(it->first);
-			int len = strlen(k)+1+it->second.length();
+			size_t len = strlen(k)+1+it->second.length();
 			if(ret.length() > 255) {
 				post("txtrecord %s too long!",k);
 				continue;
@@ -313,20 +319,7 @@ protected:
 	
 	virtual void Update()
 	{
-		if(type)
-			Install(new ServiceWorker(this,name,type,domain,port,interf,makerec()));
-		else
-			Stop();
-	}
-
-	// can be called from a secondary thread
-	virtual void OnRegister(const char *name,const char *type,const char *domain)
-	{
-		t_atom at[3];
-		SetString(at[0],name);
-		SetString(at[1],type);
-		SetString(at[2],DNSUnescape(domain).c_str());
-		ToQueueAnything(GetOutAttr(),sym_service,3,at);
+        Install(type?new ServiceWorker(name,type,domain,port,interf,makerec()):NULL);
 	}
 
 	FLEXT_CALLVAR_V(mg_name,ms_name)

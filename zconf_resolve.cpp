@@ -4,26 +4,24 @@ zconf - zeroconf networking objects
 Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
+
+$LastChangedRevision$
+$LastChangedDate$
+$LastChangedBy$
 */
 
 #include "zconf.h"
 
 namespace zconf {
 
-class ResolveBase
-	: public Base
-{
-public:
-    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord) = 0;
-};
+static Symbol sym_resolve,sym_txtrecord;
 
 class ResolveWorker
 	: public Worker
 {
 public:
-	ResolveWorker(ResolveBase *s,Symbol n,Symbol t,Symbol d,int i)
-		: Worker(s)
-		, name(n),type(t),domain(d),interf(i)
+	ResolveWorker(Symbol n,Symbol t,Symbol d,int i)
+        : name(n),type(t),domain(d),interf(i)
 	{}
 	
 protected:
@@ -46,7 +44,7 @@ protected:
 			return Worker::Init();
 		}
 		else {
-			static_cast<ResolveBase *>(self)->OnError(err);
+			OnError(err);
 			return false;
 		}
 	} 
@@ -70,7 +68,6 @@ private:
 //        post("Resolve callback");
 
         ResolveWorker *w = (ResolveWorker *)context;
-		FLEXT_ASSERT(w->self);
 
 		if(LIKELY(errorCode == kDNSServiceErr_NoError)) {
 //            post("Resolve ok");
@@ -102,16 +99,49 @@ private:
                 char ipaddr[16];
                 sprintf(ipaddr,"%03i.%03i.%03i.%03i",addr[0],addr[1],addr[2],addr[3]);
 //                post("Resolve %s %i",ipaddr,port);
-                static_cast<ResolveBase *>(w->self)->OnResolve(srvname,hosttarget,ipaddr,type,domain,port,ifIndex,txtLen,txtRecord);
+                w->OnResolve(srvname,hosttarget,ipaddr,type,domain,port,ifIndex,txtLen,txtRecord);
             }
 		}
 		else
-			static_cast<ResolveBase *>(w->self)->OnError(errorCode);
+			w->OnError(errorCode);
 		
 		// remove immediately
-		w->Stop();
+//		w->shouldexit = true;
     }
 	
+	// can be called from a secondary thread
+    void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord)
+    {
+        bool hastxtrec = txtRecord && txtLen && *txtRecord;
+		t_atom at[8];
+        SetString(at[0],DNSUnescape(srvname).c_str()); // host name
+        SetString(at[1],type); // type
+        SetString(at[2],DNSUnescape(domain).c_str()); // domain
+		SetInt(at[3],ifix);
+        SetString(at[4],DNSUnescape(hostname).c_str()); // host name
+        SetString(at[5],ipaddr); // ip address
+		SetInt(at[6],port);
+        SetBool(at[7],hastxtrec);
+		Message(sym_resolve,8,at);
+        if(hastxtrec) {
+            for(int i = 0; i < txtLen; ++i) {
+                char txt[256];
+                int l = ((const unsigned char *)txtRecord)[i];
+                memcpy(txt,txtRecord+i+1,l);
+                txt[l] = 0;
+                char *ass = strchr(txt,'=');
+                if(ass) { 
+                    *ass = 0;
+                    SetString(at[1],ass+1);
+                }
+                SetString(at[0],txt);
+                Message(sym_txtrecord,ass?2:1,at);
+                i += l;
+            }
+    		Message(sym_txtrecord,0,NULL);
+        }
+    }
+
     static char *getdot(char *txt)
     {
         bool escaped = false;      
@@ -136,9 +166,9 @@ private:
 
 
 class Resolve
-	: public ResolveBase
+	: public Base
 {
-	FLEXT_HEADER_S(Resolve,ResolveBase,Setup)
+	FLEXT_HEADER_S(Resolve,Base,Setup)
 public:
 
 	Resolve() {}
@@ -146,7 +176,7 @@ public:
 	void m_resolve(int argc,const t_atom *argv)
 	{
         if(argc == 0)
-            Stop();
+            Install(NULL);
         else if(argc < 2 || !IsSymbol(argv[0]) || !IsSymbol(argv[1])) {
 			post("%s - %s: type (like _ssh._tcp or _osc._udp) and servicename must be given",thisName(),GetString(thisTag()));
 		}
@@ -156,46 +186,11 @@ public:
             Symbol domain = argc >= 3?GetASymbol(argv[2]):NULL;
             int interf = argc >= 4?GetAInt(argv[3]):0;
 
-		    Install(new ResolveWorker(this,name,type,domain,interf));
+		    Install(new ResolveWorker(name,type,domain,interf));
         }
 	}
 
 protected:
-
-	static Symbol sym_resolve,sym_txtrecord;
-
-	// can be called from a secondary thread
-    virtual void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord)
-    {
-        bool hastxtrec = txtRecord && txtLen && *txtRecord;
-		t_atom at[8];
-        SetString(at[0],DNSUnescape(srvname).c_str()); // host name
-        SetString(at[1],type); // type
-        SetString(at[2],DNSUnescape(domain).c_str()); // domain
-		SetInt(at[3],ifix);
-        SetString(at[4],DNSUnescape(hostname).c_str()); // host name
-        SetString(at[5],ipaddr); // ip address
-		SetInt(at[6],port);
-        SetBool(at[7],hastxtrec);
-		ToQueueAnything(GetOutAttr(),sym_resolve,8,at);
-        if(hastxtrec) {
-            for(int i = 0; i < txtLen; ++i) {
-                char txt[256];
-                int l = ((const unsigned char *)txtRecord)[i];
-                memcpy(txt,txtRecord+i+1,l);
-                txt[l] = 0;
-                char *ass = strchr(txt,'=');
-                if(ass) { 
-                    *ass = 0;
-                    SetString(at[1],ass+1);
-                }
-                SetString(at[0],txt);
-                ToQueueAnything(GetOutAttr(),sym_txtrecord,ass?2:1,at);
-                i += l;
-            }
-    		ToQueueAnything(GetOutAttr(),sym_txtrecord,0,NULL);
-        }
-    }
 
 	FLEXT_CALLBACK_V(m_resolve)
 
@@ -207,8 +202,6 @@ protected:
 		FLEXT_CADDMETHOD_(c,0,sym_resolve,m_resolve);
 	}
 };
-
-Symbol Resolve::sym_resolve,Resolve::sym_txtrecord;
 
 FLEXT_LIB("zconf.resolve, zconf",Resolve)
 

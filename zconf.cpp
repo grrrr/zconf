@@ -4,11 +4,15 @@ zconf - zeroconf networking objects
 Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
+
+$LastChangedRevision$
+$LastChangedDate$
+$LastChangedBy$
 */
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.1.6"
+#define ZCONF_VERSION "0.2.0"
 
 namespace zconf {
 
@@ -69,13 +73,14 @@ std::string DNSUnescape(const char *txt)
 
 Worker::~Worker()
 {
-	FLEXT_ASSERT(!self);
+    fprintf(stderr,"Destroy %p\n",this);
 	if(client) 
 		DNSServiceRefDeallocate(client);
 }
 
 bool Worker::Init()
 {
+    fprintf(stderr,"Init %p\n",this);
 	fd = DNSServiceRefSockFD(client);
 	return fd >= 0;
 }
@@ -169,22 +174,28 @@ exitWithError:
 
 ////////////////////////////////////////////////
 
-Symbol Base::sym_error,Base::sym_add,Base::sym_remove;
-Base::Workers *Base::workers = NULL;
+Symbol Worker::sym_error,Worker::sym_add,Worker::sym_remove;
+
+Base::Workers *Base::newworkers = NULL;
+flext::ThrCond Base::cond;
+
+typedef std::set<Base *> ObjSet;
+static ObjSet objects;
 
 Base::Base() 
-	: worker(NULL)
 {
 	AddInAnything("messages");
+    objects.insert(this);
 }
 
 Base::~Base() 
 {
-	Stop();
+    objects.erase(this);
+	Install(NULL);
 }
 
 // can be called from a secondary thread
-void Base::OnError(DNSServiceErrorType error)
+void Worker::OnError(DNSServiceErrorType error)
 {
 	const char *errtxt;
 	switch(error) { 
@@ -216,80 +227,136 @@ void Base::OnError(DNSServiceErrorType error)
 
 	t_atom at; 
 	SetString(at,errtxt);
-	ToQueueAnything(GetOutAttr(),sym_error,1,&at);
+	Message(sym_error,1,&at);
 }
 
 void Base::Install(Worker *w)
 {
-	if(worker) Stop();
-	FLEXT_ASSERT(workers);
-	workers->push_back(worker = w);
-	// wake up idle....
+    if(worker)
+        worker->shouldexit = true;
+
+    worker.reset(w);
+
+    if(worker) {
+        FLEXT_ASSERT(newworkers);
+	    newworkers->Put(worker);
+	    // wake up worker thread....
+        cond.Signal();
+    }
 }
 
-t_int Base::idlefun(t_int *)
+void Base::threadfun(thr_params *)
 {
-	FLEXT_ASSERT(workers);
+	FLEXT_ASSERT(newworkers);
 
-    // remove freed workers before doing anything with them
-	for(int i = (int)workers->size()-1; i >= 0; --i) {
-		Worker *w = (*workers)[i];
-		if(UNLIKELY(!w->self)) {
-			delete w;
-			workers->erase(workers->begin()+i);
-		}
-	}
-	
-	fd_set readfds;
-	int maxfds = -1;
-	bool again = false;
-	FD_ZERO(&readfds);
-    
-    for(Workers::iterator it = workers->begin(); it != workers->end(); ++it) {
-		Worker *w = *it;
-		if(UNLIKELY(!w->client)) {
-			if(LIKELY(w->Init()))
-				again = true;
-			else
-				w->Stop(); // marked to be unused
-		}
-		else {
-			FD_SET(w->fd,&readfds);
-			if(w->fd > maxfds) maxfds = w->fd;
-		}
-	}
-	
-	if(LIKELY(maxfds >= 0)) {
-		timeval tv; 
-		tv.tv_sec = tv.tv_usec = 0; // don't block
-		int result = select(maxfds+1,&readfds,NULL,NULL,&tv);
-		if(result > 0) {
-			for(Workers::iterator it = workers->begin(); it != workers->end(); ++it) {
-				Worker *w = *it;
-				if(w->fd >= 0 && FD_ISSET(w->fd,&readfds)) {
-//                    post("file selector set");
-					DNSServiceErrorType err = DNSServiceProcessResult(w->client);
-					if(UNLIKELY(err)) {
-						post("DNSServiceProcessResult call failed: %i",err);
-						w->Stop();
-					}
-				}
-			}
-		}		
-	}
+    typedef std::set<WorkerPtr> WorkerSet;
+    WorkerSet curworkers;
 
-	return again?1:2;
+    for(;;) {
+        // add new workers
+        while(UNLIKELY(newworkers->Avail())) {
+            // we ought to be the only reader!
+            WorkerPtr w(newworkers->Get());
+            if(LIKELY(w->Init()))
+                curworkers.insert(w);
+            // else abandon worker
+        }
+
+	    fd_set readfds;
+	    int maxfds = -1;
+	    FD_ZERO(&readfds);
+        
+        for(WorkerSet::iterator it = curworkers.begin(); it != curworkers.end(); ) {
+		    WorkerPtr w(*it);
+            WorkerSet::iterator it1 = it; ++it1;
+
+            if(UNLIKELY(w->shouldexit))
+                curworkers.erase(it);
+            else {
+                FLEXT_ASSERT(w->client && w->fd >= 0);
+
+                FD_SET(w->fd,&readfds);
+			    if(w->fd > maxfds) maxfds = w->fd;
+            }
+
+            it = it1;
+	    }
+
+        // all workers are in local myworkers now, none in curworkers
+
+	    if(maxfds >= 0) {
+		    timeval tv; 
+		    tv.tv_sec = tv.tv_usec = 0; // don't block
+		    int result = select(maxfds+1,&readfds,NULL,NULL,&tv);
+		    if(result > 0) {
+                for(WorkerSet::iterator it = curworkers.begin(); it != curworkers.end(); ++it) {
+                    WorkerPtr w(*it);
+                    FLEXT_ASSERT(w->client && w->fd >= 0);
+
+                    // let's see if worker has been selected
+				    if(/*w->fd >= 0 &&*/ FD_ISSET(w->fd,&readfds)) {
+					    DNSServiceErrorType err = DNSServiceProcessResult(w->client);
+                        if(UNLIKELY(err)) {
+                            // selected and failed -> abandon worker and post error
+						    post("DNSServiceProcessResult call failed: %i",err);
+
+                            // delete failing worker on next round
+                            w->shouldexit = true;
+                        }
+				    }
+			    }
+		    }
+	    }
+
+        cond.TimedWait(0.01);
+    }
+}
+
+#ifdef PD_DEVEL_VERSION
+t_int Base::idlefun(t_int* argv)
+{
+#else
+static t_clock *idleclk = NULL;
+void Base::idlefun()
+{
+#endif
+    for(ObjSet::const_iterator it = objects.begin(); it != objects.end(); ++it)
+        (*it)->CbIdle();
+#ifdef PD_DEVEL_VERSION
+    return 2;
+#else
+    clock_delay(idleclk,1);
+#endif
+}
+
+bool Base::CbIdle()
+{
+    if(worker) {
+        // send waiting responses
+        while(worker->messages.Avail())  // it's important that we are the only message reader...
+            ToOutAnything(GetOutAttr(),worker->messages.Get());
+    }
+    return false;
 }
 
 void Base::Setup(t_classid)
 {
-	if(!workers) {
-		sym_error = MakeSymbol("error");
-		sym_add = MakeSymbol("add");
-		sym_remove = MakeSymbol("remove");
+	if(!newworkers) {
+        Worker::sym_error = MakeSymbol("error");
+		Worker::sym_add = MakeSymbol("add");
+		Worker::sym_remove = MakeSymbol("remove");
 
-		workers = new Workers;
+		newworkers = new Workers;
+
+#ifdef PD_DEVEL_VERSION
 		sys_callback(idlefun,NULL,0);
+#else
+        idleclk = clock_new(NULL,idlefun);
+        clock_delay(idleclk,1);
+#endif
+
+        // start file helper thread
+        LaunchThread(threadfun,NULL);
 	}
 }
 

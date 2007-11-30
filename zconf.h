@@ -4,6 +4,10 @@ zconf - zeroconf networking objects
 Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
+
+$LastChangedRevision$
+$LastChangedDate$
+$LastChangedBy$
 */
 
 #ifndef __ZCONF_H
@@ -12,10 +16,11 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 #define FLEXT_ATTRIBUTES 1
 
 #include <flext.h>
+#include <flcontainers.h>
 
 #if FLEXT_OS == FLEXT_OS_WIN
 	#include <stdlib.h>
-    #include <winsock2.h>
+    #include <winsock.h>
 #else
 	#include <unistd.h>
 	#include <netdb.h>
@@ -28,6 +33,9 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include <vector>
 #include <string>
+#include <set>
+#include <boost/shared_ptr.hpp>
+
 
 namespace zconf {
 
@@ -43,21 +51,24 @@ class Worker
 	: public flext
 {
 	friend class Base;
-	friend void Free(Worker *w);
+
+public:
+	virtual ~Worker();
 
 protected:
-	Worker(Base *b): self(b),client(0),fd(-1) {}
-	virtual ~Worker();
+	Worker(): client(0),fd(-1),shouldexit(false) {}
 	
-	inline void Stop();
-	
-	// to be called from idle function (does the actual work)
+    void Message(AtomAnything &msg) { messages.Put(msg); }
+    void Message(const t_symbol *sym,int argc,const t_atom *argv) { return Message(AtomAnything(sym,argc,argv)); }
+
+    void OnError(DNSServiceErrorType error);
+
+	// to be called from worker thread (does the actual work)
 	virtual bool Init();	
 	
-	Base *self;
 	DNSServiceRef client;
 	int fd;
-
+    bool shouldexit;
 
 	typedef struct { unsigned char c[ 64]; } domainlabel;      // One label: length byte and up to 63 characters.
 	typedef struct { unsigned char c[256]; } domainname;       // Up to 255 bytes of length-prefixed domainlabels.
@@ -65,7 +76,15 @@ protected:
 	static char *conv_label2str(const domainlabel *label, char *ptr);
 	static char *conv_domain2str(const domainname *name, char *ptr);
 	static bool conv_type_domain(const void *rdata, uint16_t rdlen, char *type, char *domain);
+
+	static Symbol sym_error,sym_add,sym_remove;
+
+    typedef ValueFifo<AtomAnything> Messages;
+    Messages messages;
 };
+
+typedef boost::shared_ptr<Worker> WorkerPtr;
+
 
 class Base
 	: public flext_base
@@ -78,34 +97,30 @@ public:
 	Base();
 	virtual ~Base();
 	
-    virtual void OnError(DNSServiceErrorType error);
-
 protected:
 	void Install(Worker *w);
 
-	void Stop()
-	{
-		if(worker) {
-			worker->self = NULL; // mark as abandoned
-			worker = NULL;
-		}
-	}
-
-	static Symbol sym_error,sym_add,sym_remove;
-
 private:
-	Worker *worker;
+	WorkerPtr worker;
 
-	typedef std::vector<Worker *> Workers;
-	static Workers *workers;
+    typedef ValueFifo<WorkerPtr> Workers;
+	static Workers *newworkers;
 
+#ifdef PD_DEVEL_VERSION
 	static t_int idlefun(t_int *data);
+#else
+    static void idlefun();
+#endif
+
+    static void threadfun(thr_params *);
 
 	static void Setup(t_classid);
+
+    static ThrCond cond;
+
+    virtual bool CbIdle();
 };
 
-inline void Worker::Stop() { if(self) self->Stop(); }
-
-}
+} // namespace
 
 #endif
