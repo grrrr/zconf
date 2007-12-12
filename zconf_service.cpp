@@ -311,8 +311,6 @@ protected:
 		return ret;
 	}
 
-	static Symbol sym_service,sym_txtrecord;
-
 	Symbol name,type,domain;
     int interf,port;
 	Textrecords txtrec;
@@ -346,8 +344,6 @@ protected:
 		FLEXT_CADDMETHOD_(c,0,"gettxtrecord",mg_txtrecord);
 	}
 };
-
-Symbol Service::sym_service,Service::sym_txtrecord;
 
 FLEXT_LIB_V("zconf.service, zconf",Service)
 

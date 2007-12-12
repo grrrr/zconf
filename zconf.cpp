@@ -73,14 +73,14 @@ std::string DNSUnescape(const char *txt)
 
 Worker::~Worker()
 {
-    fprintf(stderr,"Destroy %p\n",this);
+//    fprintf(stderr,"Destroy %p\n",this);
 	if(client) 
 		DNSServiceRefDeallocate(client);
 }
 
 bool Worker::Init()
 {
-    fprintf(stderr,"Init %p\n",this);
+//    fprintf(stderr,"Init %p\n",this);
 	fd = DNSServiceRefSockFD(client);
 	return fd >= 0;
 }
