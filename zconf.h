@@ -59,7 +59,7 @@ protected:
 	Worker(): client(0),fd(-1),shouldexit(false) {}
 	
     void Message(AtomAnything &msg) { messages.Put(msg); }
-    void Message(const t_symbol *sym,int argc,const t_atom *argv) { return Message(AtomAnything(sym,argc,argv)); }
+    void Message(const t_symbol *sym,int argc,const t_atom *argv) { AtomAnything msg(sym,argc,argv); Message(msg); }
 
     void OnError(DNSServiceErrorType error);
 
