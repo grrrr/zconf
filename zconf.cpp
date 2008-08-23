@@ -1,7 +1,7 @@
 /* 
 zconf - zeroconf networking objects
 
-Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
+Copyright (c)2006,2008 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
 
@@ -12,7 +12,7 @@ $LastChangedBy$
 
 #include "zconf.h"
 
-#define ZCONF_VERSION "0.2.0"
+#define ZCONF_VERSION "0.2.1"
 
 namespace zconf {
 
@@ -316,16 +316,14 @@ void Base::threadfun(thr_params *)
 t_int Base::idlefun(t_int* argv)
 {
 #else
-static t_clock *idleclk = NULL;
-void Base::idlefun()
+static flext::Timer *idleclk = NULL;
+void Base::idlefun(void *)
 {
 #endif
     for(ObjSet::const_iterator it = objects.begin(); it != objects.end(); ++it)
         (*it)->CbIdle();
 #ifdef PD_DEVEL_VERSION
     return 2;
-#else
-    clock_delay(idleclk,1);
 #endif
 }
 
@@ -351,8 +349,9 @@ void Base::Setup(t_classid)
 #ifdef PD_DEVEL_VERSION
 		sys_callback(idlefun,NULL,0);
 #else
-        idleclk = clock_new(NULL,idlefun);
-        clock_delay(idleclk,1);
+        idleclk = new flext::Timer;
+        idleclk->SetCallback(idlefun);
+        idleclk->Periodic(0.001);
 #endif
 
         // start file helper thread
@@ -366,7 +365,7 @@ static void main()
 {
 	flext::post("---------------------------------------");
 	flext::post("zconf - zeroconfig objects");
-    flext::post("version " ZCONF_VERSION " (c)2006,2007 Thomas Grill");
+    flext::post("version " ZCONF_VERSION " (c)2006,2008 Thomas Grill");
 #ifdef FLEXT_DEBUG
     flext::post("");
     flext::post("DEBUG BUILD - " __DATE__ " " __TIME__);

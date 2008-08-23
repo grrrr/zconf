@@ -109,7 +109,7 @@ private:
 #ifdef PD_DEVEL_VERSION
 	static t_int idlefun(t_int *data);
 #else
-    static void idlefun();
+    static void idlefun(void *);
 #endif
 
     static void threadfun(thr_params *);

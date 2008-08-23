@@ -62,7 +62,7 @@ private:
         const char *hosttarget, 
         uint16_t opaqueport, 
         uint16_t txtLen, 
-        const char *txtRecord, 
+        const unsigned char *txtRecord, 
         void *context)
 	{
 //        post("Resolve callback");
@@ -110,7 +110,7 @@ private:
     }
 	
 	// can be called from a secondary thread
-    void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord)
+    void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const unsigned char *txtRecord)
     {
         bool hastxtrec = txtRecord && txtLen && *txtRecord;
 		t_atom at[8];
