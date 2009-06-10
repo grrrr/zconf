@@ -61,8 +61,12 @@ private:
 	    const char *fullname, 
         const char *hosttarget, 
         uint16_t opaqueport, 
-        uint16_t txtLen, 
-        const unsigned char *txtRecord, 
+        uint16_t txtLen,
+#ifdef __APPLE__
+        const char *txtRecord,
+#else
+        const unsigned char *txtRecord,
+#endif
         void *context)
 	{
 //        post("Resolve callback");
@@ -99,7 +103,7 @@ private:
                 char ipaddr[16];
                 sprintf(ipaddr,"%03i.%03i.%03i.%03i",addr[0],addr[1],addr[2],addr[3]);
 //                post("Resolve %s %i",ipaddr,port);
-                w->OnResolve(srvname,hosttarget,ipaddr,type,domain,port,ifIndex,txtLen,txtRecord);
+                w->OnResolve(srvname,hosttarget,ipaddr,type,domain,port,ifIndex,txtLen,(char *)txtRecord);
             }
 		}
 		else
@@ -110,7 +114,7 @@ private:
     }
 	
 	// can be called from a secondary thread
-    void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const unsigned char *txtRecord)
+    void OnResolve(const char *srvname,const char *hostname,const char *ipaddr,const char *type,const char *domain,int port,int ifix,int txtLen,const char *txtRecord)
     {
         bool hastxtrec = txtRecord && txtLen && *txtRecord;
 		t_atom at[8];
@@ -126,7 +130,7 @@ private:
         if(hastxtrec) {
             for(int i = 0; i < txtLen; ++i) {
                 char txt[256];
-                int l = ((const unsigned char *)txtRecord)[i];
+                int l = (txtRecord)[i];
                 memcpy(txt,txtRecord+i+1,l);
                 txt[l] = 0;
                 char *ass = strchr(txt,'=');
