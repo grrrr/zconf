@@ -1,7 +1,7 @@
 /* 
 zconf - zeroconf networking objects
 
-Copyright (c)2006,2007 Thomas Grill (gr@grrrr.org)
+Copyright (c)2006,2011 Thomas Grill (gr@grrrr.org)
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see the file, "license.txt," in this distribution.  
 
@@ -62,11 +62,7 @@ private:
         const char *hosttarget, 
         uint16_t opaqueport, 
         uint16_t txtLen,
-#ifdef __APPLE__
-        const char *txtRecord,
-#else
         const unsigned char *txtRecord,
-#endif
         void *context)
 	{
 //        post("Resolve callback");
