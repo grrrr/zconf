@@ -12,6 +12,7 @@ $LastChangedBy$
 
 #include "zconf.h"
 #include <map>
+#include <cstdio>
 
 namespace zconf {
 

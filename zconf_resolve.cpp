@@ -11,6 +11,7 @@ $LastChangedBy$
 */
 
 #include "zconf.h"
+#include <cstdio>
 
 namespace zconf {
 
